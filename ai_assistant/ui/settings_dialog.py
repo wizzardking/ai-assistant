@@ -33,12 +33,14 @@ from ai_assistant.config import (
     DEFAULT_HOTKEY,
     DEFAULT_IMAGE_MODEL,
     DEFAULT_IMAGE_PROMPT,
+    DEFAULT_IMAGE_QUALITY,
     DEFAULT_IMAGE_SIZE,
     DEFAULT_LANGUAGES,
     DEFAULT_REPLY_PROMPT,
     DEFAULT_REWRITER_PROMPT,
     DEFAULT_SUMMARIZE_PROMPT,
     DEFAULT_TRANSLATOR_PROMPT,
+    IMAGE_QUALITIES,
     IMAGE_SIZES,
     save_config,
 )
@@ -275,6 +277,8 @@ class SettingsDialog(QDialog):
             module_settings.model = DEFAULT_IMAGE_MODEL
         if not module_settings.image_size:
             module_settings.image_size = DEFAULT_IMAGE_SIZE
+        if not module_settings.image_quality:
+            module_settings.image_quality = DEFAULT_IMAGE_QUALITY
 
         form = QFormLayout()
         outer.addLayout(form)
@@ -287,9 +291,20 @@ class SettingsDialog(QDialog):
 
         self._image_size = QComboBox()
         self._image_size.addItems(IMAGE_SIZES)
+        self._image_size.setEditable(True)
         if module_settings.image_size in IMAGE_SIZES:
             self._image_size.setCurrentText(module_settings.image_size)
-        form.addRow("Bildgröße:", self._image_size)
+        else:
+            self._image_size.setCurrentText(module_settings.image_size or DEFAULT_IMAGE_SIZE)
+        form.addRow("Bildgröße (Vorauswahl):", self._image_size)
+
+        self._image_quality = QComboBox()
+        self._image_quality.addItems(IMAGE_QUALITIES)
+        if module_settings.image_quality in IMAGE_QUALITIES:
+            self._image_quality.setCurrentText(module_settings.image_quality)
+        else:
+            self._image_quality.setCurrentText(DEFAULT_IMAGE_QUALITY)
+        form.addRow("Qualität (Vorauswahl):", self._image_quality)
 
         prompt_label = QLabel("Prompt-Vorlage (Platzhalter: {prompt}):")
         outer.addWidget(prompt_label)
@@ -386,7 +401,8 @@ class SettingsDialog(QDialog):
 
         image = self._config.get_module_settings("image_generate", DEFAULT_IMAGE_PROMPT)
         image.model = self._image_model.currentText().strip() or DEFAULT_IMAGE_MODEL
-        image.image_size = self._image_size.currentText() or DEFAULT_IMAGE_SIZE
+        image.image_size = self._image_size.currentText().strip() or DEFAULT_IMAGE_SIZE
+        image.image_quality = self._image_quality.currentText().strip() or DEFAULT_IMAGE_QUALITY
         image.prompt = self._image_prompt.toPlainText().strip() or DEFAULT_IMAGE_PROMPT
 
         chat = self._config.get_module_settings("chat", DEFAULT_CHAT_SYSTEM_PROMPT)

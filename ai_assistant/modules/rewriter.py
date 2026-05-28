@@ -27,11 +27,10 @@ class RewriterModule:
     def menu(self, settings: ModuleSettings) -> tuple[MenuNode, ...]:
         nodes: list[MenuNode] = []
         for tone_id, label in TONES.items():
+            # "plain" means "keep original" which is pointless for a rewrite module.
             if tone_id == "plain":
-                tone_label = "Original beibehalten"
-            else:
-                tone_label = label
-            nodes.append(MenuNode(id=tone_id, label=tone_label, icon=_tone_icon(tone_id)))
+                continue
+            nodes.append(MenuNode(id=tone_id, label=label, icon=_tone_icon(tone_id)))
         return tuple(nodes)
 
     def default_prompt(self) -> str:
@@ -52,8 +51,6 @@ class RewriterModule:
 
         tone_id = path[0]
         tone_instruction = TONE_INSTRUCTIONS.get(tone_id, "")
-        if tone_id == "plain":
-            tone_instruction = "Schreibe den Text in einem neutralen Ton um."
         if tone_instruction:
             tone_instruction = tone_instruction + " "
 

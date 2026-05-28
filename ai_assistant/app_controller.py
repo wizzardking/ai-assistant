@@ -8,7 +8,13 @@ from PyQt6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMessageBox
 
 from ai_assistant.clipboard import ClipboardManager
 from ai_assistant.config import (
+    AVAILABLE_IMAGE_MODELS,
     DEFAULT_CHAT_SYSTEM_PROMPT,
+    DEFAULT_IMAGE_MODEL,
+    DEFAULT_IMAGE_QUALITY,
+    DEFAULT_IMAGE_SIZE,
+    IMAGE_QUALITIES,
+    IMAGE_SIZES,
     ModuleSettings,
     load_config,
 )
@@ -16,6 +22,7 @@ from ai_assistant.hotkey import HotkeyListener
 from ai_assistant.modules.base import DISPLAY_IMAGE, DISPLAY_WINDOW, MenuNode
 from ai_assistant.modules.registry import create_default_registry
 from ai_assistant.ui.chat_window import ChatWindow
+from ai_assistant.ui.image_prompt_dialog import ImagePromptDialog
 from ai_assistant.ui.image_result_window import ImageResultWindow
 from ai_assistant.ui.radial_menu import RadialMenu
 from ai_assistant.ui.result_window import ResultWindow
@@ -133,16 +140,37 @@ class AppController(QObject):
                 )
                 return
 
+        settings = self._config.get_module_settings(module_id, module.default_prompt())
+        display_mode = getattr(module, "display_mode", "clipboard")
+
+        # Pick a sensible default model: image modules need an image model,
+        # everything else falls back to the OpenAI chat default.
+        if display_mode == DISPLAY_IMAGE:
+            if not settings.model or settings.model not in AVAILABLE_IMAGE_MODELS:
+                settings.model = DEFAULT_IMAGE_MODEL
+        elif not settings.model:
+            settings.model = self._config.openai_default_model
+
         extra_input = ""
         if leaf.needs_extra_input:
-            extra_input = self._prompt_extra_input(leaf.extra_input_prompt)
-            if extra_input is None:
-                logger.info("Extra-input dialog cancelled")
-                return
-
-        settings = self._config.get_module_settings(module_id, module.default_prompt())
-        if not settings.model:
-            settings.model = self._config.openai_default_model
+            if module_id == "image_generate":
+                result = self._prompt_image_input(leaf.extra_input_prompt, settings)
+                if result is None:
+                    logger.info("Image prompt dialog cancelled")
+                    return
+                prompt_text, chosen_size, chosen_quality = result
+                extra_input = prompt_text
+                # Override size/quality for this run only.
+                settings = settings.model_copy()
+                settings.image_size = chosen_size or settings.image_size or DEFAULT_IMAGE_SIZE
+                settings.image_quality = (
+                    chosen_quality or settings.image_quality or DEFAULT_IMAGE_QUALITY
+                )
+            else:
+                extra_input = self._prompt_extra_input(leaf.extra_input_prompt)
+                if extra_input is None:
+                    logger.info("Extra-input dialog cancelled")
+                    return
 
         logger.info("Running module %s (model=%s, path=%s)", module_id, settings.model, path)
         self._active_module_id = module_id
@@ -173,6 +201,27 @@ class AppController(QObject):
         if not ok:
             return None
         return text or ""
+
+    def _prompt_image_input(
+        self,
+        prompt_label: str,
+        settings: ModuleSettings,
+    ) -> tuple[str, str, str] | None:
+        default_size = settings.image_size or DEFAULT_IMAGE_SIZE
+        default_quality = settings.image_quality or DEFAULT_IMAGE_QUALITY
+        dialog = ImagePromptDialog(
+            prompt_label=prompt_label or "Beschreibe das gewünschte Bild.",
+            default_size=default_size,
+            available_sizes=list(IMAGE_SIZES),
+            default_quality=default_quality,
+            available_qualities=list(IMAGE_QUALITIES),
+        )
+        if not dialog.exec():
+            return None
+        prompt_text = dialog.prompt_text()
+        if not prompt_text:
+            return None
+        return prompt_text, dialog.selected_size(), dialog.selected_quality()
 
     def _on_module_success(self, result) -> None:
         module = self._registry.get(self._active_module_id or "")

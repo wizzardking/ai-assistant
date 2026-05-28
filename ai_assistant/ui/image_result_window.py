@@ -13,12 +13,44 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
-    QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
-    QWidget,
 )
 
 logger = logging.getLogger(__name__)
+
+
+class _AspectImageLabel(QLabel):
+    """QLabel that always shows its pixmap scaled proportionally to fit the widget."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._source: QPixmap | None = None
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setMinimumSize(1, 1)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        self.setStyleSheet("background: #111;")
+
+    def set_source(self, pixmap: QPixmap) -> None:
+        self._source = pixmap
+        self._refresh()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._refresh()
+
+    def _refresh(self) -> None:
+        if self._source is None or self._source.isNull():
+            return
+        target = self.size()
+        if target.width() <= 0 or target.height() <= 0:
+            return
+        scaled = self._source.scaled(
+            target,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.setPixmap(scaled)
 
 
 class ImageResultWindow(QDialog):
@@ -41,7 +73,6 @@ class ImageResultWindow(QDialog):
 
         self._image_bytes = image_bytes
         self._prompt = prompt
-
         self._image = QImage()
         self._image.loadFromData(image_bytes)
 
@@ -49,23 +80,19 @@ class ImageResultWindow(QDialog):
         layout.setContentsMargins(16, 16, 16, 12)
         layout.setSpacing(10)
 
-        header_font = QFont(self.font())
-        header_font.setBold(True)
-        header_font.setPointSize(header_font.pointSize() + 1)
-
         if prompt:
+            header_font = QFont(self.font())
+            header_font.setBold(True)
+            header_font.setPointSize(header_font.pointSize() + 1)
             prompt_label = QLabel(f"Prompt: {prompt}")
             prompt_label.setWordWrap(True)
             prompt_label.setFont(header_font)
             layout.addWidget(prompt_label)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        self._image_label = QLabel()
-        self._image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._image_label.setPixmap(self._scaled_pixmap())
-        scroll.setWidget(self._image_label)
-        layout.addWidget(scroll, 1)
+        self._image_label = _AspectImageLabel()
+        if not self._image.isNull():
+            self._image_label.set_source(QPixmap.fromImage(self._image))
+        layout.addWidget(self._image_label, 1)
 
         self._status_label = QLabel("")
         self._status_label.setStyleSheet("color: #7cd07c;")
@@ -90,29 +117,35 @@ class ImageResultWindow(QDialog):
 
         self._size_to_screen()
 
-    def _scaled_pixmap(self) -> QPixmap:
-        pix = QPixmap.fromImage(self._image)
-        screen = QGuiApplication.primaryScreen()
-        if screen is None:
-            return pix
-        max_w = int(screen.availableGeometry().width() * 0.7)
-        max_h = int(screen.availableGeometry().height() * 0.7)
-        if pix.width() > max_w or pix.height() > max_h:
-            pix = pix.scaled(
-                max_w, max_h,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-        return pix
-
     def _size_to_screen(self) -> None:
         screen = QGuiApplication.primaryScreen()
         if screen is None:
-            self.resize(800, 600)
+            self.resize(900, 700)
             return
         geom = screen.availableGeometry()
-        width = min(900, int(geom.width() * 0.7))
-        height = min(800, int(geom.height() * 0.8))
+
+        # Pick a window size that fits the image's aspect ratio without exceeding
+        # 80% of the available screen area.
+        max_w = int(geom.width() * 0.8)
+        max_h = int(geom.height() * 0.85)
+        if self._image.isNull() or self._image.width() == 0 or self._image.height() == 0:
+            width, height = min(900, max_w), min(700, max_h)
+        else:
+            aspect = self._image.width() / self._image.height()
+            chrome_w = 60   # margins
+            chrome_h = 160  # header + buttons + margins
+            avail_w = max_w - chrome_w
+            avail_h = max_h - chrome_h
+            content_w = avail_w
+            content_h = int(content_w / aspect)
+            if content_h > avail_h:
+                content_h = avail_h
+                content_w = int(content_h * aspect)
+            width = content_w + chrome_w
+            height = content_h + chrome_h
+            width = max(640, min(width, max_w))
+            height = max(520, min(height, max_h))
+
         self.resize(width, height)
         self.move(
             geom.x() + (geom.width() - width) // 2,
