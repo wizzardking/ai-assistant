@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=AI Assistant
+Comment=Radial AI overlay for selected text
+Exec=/home/robin/Dokumente/Coding/ai-assistant/.venv/bin/ai-assistant
+Icon=preferences-system
+Terminal=false
+Categories=Utility;
+X-GNOME-Autostart-enabled=true
