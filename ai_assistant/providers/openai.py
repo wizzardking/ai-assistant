@@ -44,14 +44,18 @@ class OpenAIProvider:
         prompt: str,
         model: str = "gpt-image-2",
         size: str = "1024x1024",
+        quality: str = "auto",
     ) -> bytes:
         client = _require_client()
-        response = await client.images.generate(
-            model=model,
-            prompt=prompt,
-            size=size,
-            n=1,
-        )
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "prompt": prompt,
+            "size": size,
+            "n": 1,
+        }
+        if quality:
+            kwargs["quality"] = quality
+        response = await client.images.generate(**kwargs)
         # OpenAI returns base64 in `b64_json` when no `response_format` URL is requested
         data = response.data[0]
         b64 = getattr(data, "b64_json", None)

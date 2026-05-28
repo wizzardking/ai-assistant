@@ -4,7 +4,9 @@ from ai_assistant.config import (
     AVAILABLE_IMAGE_MODELS,
     DEFAULT_IMAGE_MODEL,
     DEFAULT_IMAGE_PROMPT,
+    DEFAULT_IMAGE_QUALITY,
     DEFAULT_IMAGE_SIZE,
+    IMAGE_QUALITIES,
     ModuleSettings,
 )
 from ai_assistant.modules.base import MenuNode, assets_dir
@@ -56,6 +58,14 @@ class ImageGenerateModule:
         if not model or model not in AVAILABLE_IMAGE_MODELS:
             model = DEFAULT_IMAGE_MODEL
         size = settings.image_size or DEFAULT_IMAGE_SIZE
+        quality = settings.image_quality or DEFAULT_IMAGE_QUALITY
+        if quality not in IMAGE_QUALITIES:
+            quality = DEFAULT_IMAGE_QUALITY
 
         provider = OpenAIProvider()
-        return await provider.generate_image(prompt=final_prompt, model=model, size=size)
+        return await provider.generate_image(
+            prompt=final_prompt,
+            model=model,
+            size=size,
+            quality=quality,
+        )

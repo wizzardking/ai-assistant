@@ -16,8 +16,16 @@ AVAILABLE_IMAGE_MODELS = ["gpt-image-2", "gpt-image-1"]
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_IMAGE_MODEL = "gpt-image-2"
 DEFAULT_PROVIDER = "openai"
-IMAGE_SIZES = ["1024x1024", "1024x1792", "1792x1024"]
+IMAGE_SIZES = [
+    "1024x1024",
+    "1024x1536",
+    "1536x1024",
+    "2560x1440",
+    "3840x2160",
+]
 DEFAULT_IMAGE_SIZE = "1024x1024"
+IMAGE_QUALITIES = ["auto", "high", "medium", "low"]
+DEFAULT_IMAGE_QUALITY = "auto"
 
 ALL_LANGUAGES: dict[str, str] = {
     "de": "Deutsch",
@@ -103,6 +111,7 @@ class ModuleSettings(BaseModel):
     prompt: str = ""
     languages: list[str] = Field(default_factory=lambda: list(DEFAULT_LANGUAGES))
     image_size: str = DEFAULT_IMAGE_SIZE
+    image_quality: str = DEFAULT_IMAGE_QUALITY
     system_prompt: str = ""
 
 

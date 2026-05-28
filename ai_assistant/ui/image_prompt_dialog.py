@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -13,20 +12,30 @@ from PyQt6.QtWidgets import (
 )
 
 
+_QUALITY_LABELS: dict[str, str] = {
+    "auto": "Auto",
+    "high": "Hoch",
+    "medium": "Mittel",
+    "low": "Niedrig",
+}
+
+
 class ImagePromptDialog(QDialog):
-    """Dialog asking for an image prompt and the desired output size."""
+    """Dialog asking for an image prompt, the desired output size and quality."""
 
     def __init__(
         self,
         prompt_label: str,
         default_size: str,
         available_sizes: list[str],
+        default_quality: str,
+        available_qualities: list[str],
         parent=None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("AI Assistant – Bild generieren")
         self.setModal(True)
-        self.resize(560, 280)
+        self.resize(600, 320)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 12)
@@ -43,8 +52,9 @@ class ImagePromptDialog(QDialog):
         self._prompt_edit.setMinimumHeight(120)
         layout.addWidget(self._prompt_edit, 1)
 
-        size_row = QHBoxLayout()
-        size_row.addWidget(QLabel("Größe:"))
+        options_row = QHBoxLayout()
+
+        options_row.addWidget(QLabel("Größe:"))
         self._size_combo = QComboBox()
         self._size_combo.addItems(available_sizes)
         if default_size in available_sizes:
@@ -52,8 +62,22 @@ class ImagePromptDialog(QDialog):
         elif default_size:
             self._size_combo.setEditable(True)
             self._size_combo.setCurrentText(default_size)
-        size_row.addWidget(self._size_combo, 1)
-        layout.addLayout(size_row)
+        options_row.addWidget(self._size_combo, 1)
+
+        options_row.addSpacing(12)
+
+        options_row.addWidget(QLabel("Qualität:"))
+        self._quality_combo = QComboBox()
+        for q in available_qualities:
+            self._quality_combo.addItem(_QUALITY_LABELS.get(q, q.capitalize()), userData=q)
+        idx = self._quality_combo.findData(default_quality)
+        if idx < 0:
+            idx = self._quality_combo.findData("auto")
+        if idx >= 0:
+            self._quality_combo.setCurrentIndex(idx)
+        options_row.addWidget(self._quality_combo, 1)
+
+        layout.addLayout(options_row)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -70,3 +94,9 @@ class ImagePromptDialog(QDialog):
 
     def selected_size(self) -> str:
         return self._size_combo.currentText().strip()
+
+    def selected_quality(self) -> str:
+        data = self._quality_combo.currentData()
+        if isinstance(data, str) and data:
+            return data
+        return self._quality_combo.currentText().strip().lower() or "auto"

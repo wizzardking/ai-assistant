@@ -11,7 +11,9 @@ from ai_assistant.config import (
     AVAILABLE_IMAGE_MODELS,
     DEFAULT_CHAT_SYSTEM_PROMPT,
     DEFAULT_IMAGE_MODEL,
+    DEFAULT_IMAGE_QUALITY,
     DEFAULT_IMAGE_SIZE,
+    IMAGE_QUALITIES,
     IMAGE_SIZES,
     ModuleSettings,
     load_config,
@@ -156,11 +158,14 @@ class AppController(QObject):
                 if result is None:
                     logger.info("Image prompt dialog cancelled")
                     return
-                prompt_text, chosen_size = result
+                prompt_text, chosen_size, chosen_quality = result
                 extra_input = prompt_text
-                # Override size for this run only.
+                # Override size/quality for this run only.
                 settings = settings.model_copy()
                 settings.image_size = chosen_size or settings.image_size or DEFAULT_IMAGE_SIZE
+                settings.image_quality = (
+                    chosen_quality or settings.image_quality or DEFAULT_IMAGE_QUALITY
+                )
             else:
                 extra_input = self._prompt_extra_input(leaf.extra_input_prompt)
                 if extra_input is None:
@@ -201,19 +206,22 @@ class AppController(QObject):
         self,
         prompt_label: str,
         settings: ModuleSettings,
-    ) -> tuple[str, str] | None:
+    ) -> tuple[str, str, str] | None:
         default_size = settings.image_size or DEFAULT_IMAGE_SIZE
+        default_quality = settings.image_quality or DEFAULT_IMAGE_QUALITY
         dialog = ImagePromptDialog(
             prompt_label=prompt_label or "Beschreibe das gewünschte Bild.",
             default_size=default_size,
             available_sizes=list(IMAGE_SIZES),
+            default_quality=default_quality,
+            available_qualities=list(IMAGE_QUALITIES),
         )
         if not dialog.exec():
             return None
         prompt_text = dialog.prompt_text()
         if not prompt_text:
             return None
-        return prompt_text, dialog.selected_size()
+        return prompt_text, dialog.selected_size(), dialog.selected_quality()
 
     def _on_module_success(self, result) -> None:
         module = self._registry.get(self._active_module_id or "")
