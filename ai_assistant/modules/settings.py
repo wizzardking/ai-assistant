@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ai_assistant.config import ModuleSettings
-from ai_assistant.modules.base import ModuleAction, assets_dir
+from ai_assistant.modules.base import MenuNode, assets_dir
 
 
 class SettingsModule:
@@ -9,8 +9,8 @@ class SettingsModule:
     icon = str(assets_dir() / "settings.svg")
     label = "Einstellungen"
 
-    def actions(self) -> list[ModuleAction]:
-        return []
+    def menu(self, settings: ModuleSettings) -> tuple[MenuNode, ...]:
+        return ()
 
     def default_prompt(self) -> str:
         return ""
@@ -21,7 +21,8 @@ class SettingsModule:
     async def run(
         self,
         text: str,
-        action_id: str | None,
+        path: tuple[str, ...],
         settings: ModuleSettings,
+        extra_input: str = "",
     ) -> str:
         return ""

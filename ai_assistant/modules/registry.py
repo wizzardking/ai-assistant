@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from ai_assistant.modules.base import Module
+from ai_assistant.modules.reply import ReplyModule
+from ai_assistant.modules.rewriter import RewriterModule
 from ai_assistant.modules.settings import SettingsModule
 from ai_assistant.modules.translator import TranslatorModule
 
@@ -22,5 +24,7 @@ class ModuleRegistry:
 def create_default_registry() -> ModuleRegistry:
     registry = ModuleRegistry()
     registry.register(TranslatorModule())
+    registry.register(RewriterModule())
+    registry.register(ReplyModule())
     registry.register(SettingsModule())
     return registry

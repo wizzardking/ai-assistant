@@ -4,11 +4,12 @@ import logging
 
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QCursor
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMessageBox
 
 from ai_assistant.clipboard import ClipboardManager
-from ai_assistant.config import load_config
+from ai_assistant.config import ModuleSettings, load_config
 from ai_assistant.hotkey import HotkeyListener
+from ai_assistant.modules.base import MenuNode
 from ai_assistant.modules.registry import create_default_registry
 from ai_assistant.ui.radial_menu import RadialMenu
 from ai_assistant.ui.settings_dialog import SettingsDialog
@@ -36,7 +37,7 @@ class AppController(QObject):
         self._cursor_y = 0
         self._worker: ModuleWorker | None = None
 
-        self._radial_menu.module_selected.connect(self._on_module_selected)
+        self._radial_menu.leaf_selected.connect(self._on_leaf_selected)
         self._radial_menu.module_interactive.connect(self._on_module_interactive)
         self.hotkey_triggered.connect(self._open_menu)
 
@@ -50,6 +51,9 @@ class AppController(QObject):
 
     def _on_hotkey(self) -> None:
         self.hotkey_triggered.emit()
+
+    def _settings_for(self, module_id: str, default_prompt: str) -> ModuleSettings:
+        return self._config.get_module_settings(module_id, default_prompt)
 
     def _open_menu(self) -> None:
         if self._radial_menu.isVisible():
@@ -69,26 +73,28 @@ class AppController(QObject):
         self._selected_text = selected
         logger.info("Opening radial menu (captured %d chars)", len(selected))
 
-        modules = self._registry.all()
         self._radial_menu.show_at(
             self._cursor_x,
             self._cursor_y,
-            modules,
+            self._registry.all(),
+            self._settings_for,
         )
 
     def _on_module_interactive(self, module_id: str) -> None:
         if module_id == "settings":
             self._open_settings()
 
-    def _on_module_selected(self, module_id: str, action_id: str) -> None:
-        logger.info("Module selected: %s/%s (text=%d chars)", module_id, action_id, len(self._selected_text))
+    def _on_leaf_selected(self, module_id: str, path: tuple, leaf: MenuNode) -> None:
+        logger.info(
+            "Leaf selected: module=%s path=%s extra_input=%s",
+            module_id, path, leaf.needs_extra_input,
+        )
         module = self._registry.get(module_id)
         if module is None:
             logger.warning("Module %r not found", module_id)
             return
 
         if not self._selected_text.strip():
-            logger.info("No text – showing error status")
             self._status.show_at(
                 self._cursor_x,
                 self._cursor_y,
@@ -98,11 +104,18 @@ class AppController(QObject):
             )
             return
 
+        extra_input = ""
+        if leaf.needs_extra_input:
+            extra_input = self._prompt_extra_input(leaf.extra_input_prompt)
+            if extra_input is None:
+                logger.info("Extra-input dialog cancelled")
+                return
+
         settings = self._config.get_module_settings(module_id, module.default_prompt())
         if not settings.model:
             settings.model = self._config.openai_default_model
 
-        logger.info("Running module %s with model %s", module_id, settings.model)
+        logger.info("Running module %s (model=%s, path=%s)", module_id, settings.model, path)
         self._status.show_at(
             self._cursor_x,
             self._cursor_y,
@@ -110,13 +123,24 @@ class AppController(QObject):
             StatusOverlay.icon_path("loading"),
         )
 
-        coro = module.run(self._selected_text, action_id or None, settings)
+        coro = module.run(self._selected_text, tuple(path), settings, extra_input)
         worker = ModuleWorker(coro)
         worker.finished_ok.connect(self._on_module_success)
         worker.finished_error.connect(self._on_module_error)
         worker.finished.connect(worker.deleteLater)
         self._worker = worker
         worker.start()
+
+    def _prompt_extra_input(self, prompt: str) -> str | None:
+        text, ok = QInputDialog.getMultiLineText(
+            None,
+            "AI Assistant – Zusatzinfos",
+            prompt or "Welche Zusatzinformationen sollen einfließen?",
+            "",
+        )
+        if not ok:
+            return None
+        return text or ""
 
     def _on_module_success(self, result: str) -> None:
         logger.info("Module finished OK (%d chars)", len(result))

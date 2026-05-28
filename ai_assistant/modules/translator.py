@@ -1,13 +1,36 @@
 from __future__ import annotations
 
-from ai_assistant.config import DEFAULT_TRANSLATOR_PROMPT, ModuleSettings
-from ai_assistant.modules.base import ModuleAction, assets_dir
+from ai_assistant.config import (
+    ALL_LANGUAGES,
+    DEFAULT_LANGUAGES,
+    DEFAULT_TRANSLATOR_PROMPT,
+    ModuleSettings,
+    TONE_INSTRUCTIONS,
+    TONES,
+)
+from ai_assistant.modules.base import MenuNode, assets_dir
 from ai_assistant.providers.openai import OpenAIProvider
 
-TARGET_LANGUAGES = {
-    "de": "Deutsch",
-    "en": "Englisch",
-}
+
+def _language_icon(code: str) -> str:
+    candidate = assets_dir() / f"{code}.svg"
+    if candidate.is_file():
+        return str(candidate)
+    return str(assets_dir() / "lang_generic.svg")
+
+
+def _tone_icon(tone_id: str) -> str:
+    candidate = assets_dir() / f"tone_{tone_id}.svg"
+    if candidate.is_file():
+        return str(candidate)
+    return str(assets_dir() / "translate.svg")
+
+
+def _build_tone_children() -> tuple[MenuNode, ...]:
+    return tuple(
+        MenuNode(id=tone_id, label=label, icon=_tone_icon(tone_id))
+        for tone_id, label in TONES.items()
+    )
 
 
 class TranslatorModule:
@@ -15,11 +38,20 @@ class TranslatorModule:
     icon = str(assets_dir() / "translate.svg")
     label = "Übersetzer"
 
-    def actions(self) -> list[ModuleAction]:
-        return [
-            ModuleAction(id="de", label="Deutsch", icon=str(assets_dir() / "de.svg")),
-            ModuleAction(id="en", label="Englisch", icon=str(assets_dir() / "en.svg")),
-        ]
+    def menu(self, settings: ModuleSettings) -> tuple[MenuNode, ...]:
+        languages = settings.languages or list(DEFAULT_LANGUAGES)
+        nodes: list[MenuNode] = []
+        for code in languages:
+            label = ALL_LANGUAGES.get(code, code.upper())
+            nodes.append(
+                MenuNode(
+                    id=code,
+                    label=label,
+                    icon=_language_icon(code),
+                    children=_build_tone_children(),
+                )
+            )
+        return tuple(nodes)
 
     def default_prompt(self) -> str:
         return DEFAULT_TRANSLATOR_PROMPT
@@ -30,13 +62,25 @@ class TranslatorModule:
     async def run(
         self,
         text: str,
-        action_id: str | None,
+        path: tuple[str, ...],
         settings: ModuleSettings,
+        extra_input: str = "",
     ) -> str:
-        if not action_id or action_id not in TARGET_LANGUAGES:
-            raise ValueError("Keine gültige Zielsprache ausgewählt.")
+        if len(path) < 2:
+            raise ValueError("Pfad muss Sprache und Schreibstil enthalten.")
 
-        target_language = TARGET_LANGUAGES[action_id]
-        prompt = settings.prompt.format(target_language=target_language, text=text)
+        language_code, tone_id = path[0], path[1]
+        target_language = ALL_LANGUAGES.get(language_code, language_code.upper())
+        tone_instruction = TONE_INSTRUCTIONS.get(tone_id, "")
+        if tone_instruction:
+            tone_instruction = tone_instruction + " "
+
+        prompt_template = settings.prompt or DEFAULT_TRANSLATOR_PROMPT
+        prompt = prompt_template.format(
+            target_language=target_language,
+            tone_instruction=tone_instruction,
+            text=text,
+        )
+
         provider = OpenAIProvider()
         return await provider.complete(prompt=prompt, model=settings.model)

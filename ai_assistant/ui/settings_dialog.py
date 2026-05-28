@@ -2,24 +2,33 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPlainTextEdit,
+    QPushButton,
+    QScrollArea,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from ai_assistant.config import (
+    ALL_LANGUAGES,
     AVAILABLE_MODELS,
     AppConfig,
     DEFAULT_HOTKEY,
+    DEFAULT_LANGUAGES,
+    DEFAULT_REPLY_PROMPT,
+    DEFAULT_REWRITER_PROMPT,
     DEFAULT_TRANSLATOR_PROMPT,
     save_config,
 )
@@ -31,7 +40,7 @@ class SettingsDialog(QDialog):
     def __init__(self, config: AppConfig, registry: ModuleRegistry, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("AI Assistant – Einstellungen")
-        self.resize(560, 460)
+        self.resize(640, 560)
 
         self._config = config
         self._registry = registry
@@ -43,6 +52,8 @@ class SettingsDialog(QDialog):
         self._tabs.addTab(self._build_general_tab(), "Allgemein")
         self._tabs.addTab(self._build_openai_tab(), "OpenAI")
         self._tabs.addTab(self._build_translator_tab(), "Übersetzer")
+        self._tabs.addTab(self._build_rewriter_tab(), "Umschreiben")
+        self._tabs.addTab(self._build_reply_tab(), "Antwort verfassen")
         self._tabs.addTab(self._build_modules_tab(), "Module")
 
         buttons = QDialogButtonBox(
@@ -72,41 +83,42 @@ class SettingsDialog(QDialog):
 
     def _build_openai_tab(self) -> QWidget:
         widget = QWidget()
-        form = QFormLayout(widget)
+        layout = QVBoxLayout(widget)
+        form = QFormLayout()
+        layout.addLayout(form)
 
         self._api_key_input = QLineEdit()
         self._api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self._api_key_input.setPlaceholderText("sk-...")
         existing = get_openai_api_key()
         if existing:
             self._api_key_input.setPlaceholderText("Key gespeichert – leer lassen zum Beibehalten")
+        else:
+            self._api_key_input.setPlaceholderText("sk-...")
         form.addRow("API-Key:", self._api_key_input)
 
         self._default_model = QComboBox()
         self._default_model.addItems(AVAILABLE_MODELS)
-        current = self._config.openai_default_model
-        if current in AVAILABLE_MODELS:
-            self._default_model.setCurrentText(current)
+        if self._config.openai_default_model in AVAILABLE_MODELS:
+            self._default_model.setCurrentText(self._config.openai_default_model)
         form.addRow("Standard-Modell:", self._default_model)
 
-        clear_row = QHBoxLayout()
-        clear_button = QDialogButtonBox()
-        clear_btn = clear_button.addButton("Key löschen", QDialogButtonBox.ButtonRole.DestructiveRole)
+        clear_btn = QPushButton("API-Key löschen")
         clear_btn.clicked.connect(self._clear_api_key)
-        clear_row.addWidget(clear_btn)
-        clear_row.addStretch()
-        form.addRow(clear_row)
-
+        layout.addWidget(clear_btn)
+        layout.addStretch()
         return widget
 
     def _build_translator_tab(self) -> QWidget:
         widget = QWidget()
-        form = QFormLayout(widget)
+        outer = QVBoxLayout(widget)
 
         module_settings = self._config.get_module_settings(
             "translator",
             DEFAULT_TRANSLATOR_PROMPT,
         )
+
+        form = QFormLayout()
+        outer.addLayout(form)
 
         self._translator_model = QComboBox()
         self._translator_model.addItems(AVAILABLE_MODELS)
@@ -114,12 +126,73 @@ class SettingsDialog(QDialog):
             self._translator_model.setCurrentText(module_settings.model)
         form.addRow("Modell:", self._translator_model)
 
-        self._translator_prompt = QPlainTextEdit(module_settings.prompt)
-        self._translator_prompt.setPlaceholderText(
-            "Platzhalter: {target_language}, {text}"
-        )
-        form.addRow("Prompt:", self._translator_prompt)
+        lang_box = QGroupBox("Verfügbare Sprachen im Radmenü")
+        lang_layout = QGridLayout(lang_box)
+        self._translator_lang_checkboxes: dict[str, QCheckBox] = {}
+        current = set(module_settings.languages or DEFAULT_LANGUAGES)
 
+        items = list(ALL_LANGUAGES.items())
+        for index, (code, label) in enumerate(items):
+            checkbox = QCheckBox(f"{label} ({code.upper()})")
+            checkbox.setChecked(code in current)
+            self._translator_lang_checkboxes[code] = checkbox
+            lang_layout.addWidget(checkbox, index // 2, index % 2)
+        outer.addWidget(lang_box)
+
+        prompt_label = QLabel("Prompt-Vorlage (Platzhalter: {target_language}, {tone_instruction}, {text}):")
+        outer.addWidget(prompt_label)
+        self._translator_prompt = QPlainTextEdit(module_settings.prompt or DEFAULT_TRANSLATOR_PROMPT)
+        outer.addWidget(self._translator_prompt)
+        return widget
+
+    def _build_rewriter_tab(self) -> QWidget:
+        widget = QWidget()
+        outer = QVBoxLayout(widget)
+
+        module_settings = self._config.get_module_settings(
+            "rewriter",
+            DEFAULT_REWRITER_PROMPT,
+        )
+
+        form = QFormLayout()
+        outer.addLayout(form)
+
+        self._rewriter_model = QComboBox()
+        self._rewriter_model.addItems(AVAILABLE_MODELS)
+        if module_settings.model in AVAILABLE_MODELS:
+            self._rewriter_model.setCurrentText(module_settings.model)
+        form.addRow("Modell:", self._rewriter_model)
+
+        prompt_label = QLabel("Prompt-Vorlage (Platzhalter: {tone_instruction}, {text}):")
+        outer.addWidget(prompt_label)
+        self._rewriter_prompt = QPlainTextEdit(module_settings.prompt or DEFAULT_REWRITER_PROMPT)
+        outer.addWidget(self._rewriter_prompt)
+        return widget
+
+    def _build_reply_tab(self) -> QWidget:
+        widget = QWidget()
+        outer = QVBoxLayout(widget)
+
+        module_settings = self._config.get_module_settings(
+            "reply",
+            DEFAULT_REPLY_PROMPT,
+        )
+
+        form = QFormLayout()
+        outer.addLayout(form)
+
+        self._reply_model = QComboBox()
+        self._reply_model.addItems(AVAILABLE_MODELS)
+        if module_settings.model in AVAILABLE_MODELS:
+            self._reply_model.setCurrentText(module_settings.model)
+        form.addRow("Modell:", self._reply_model)
+
+        prompt_label = QLabel(
+            "Prompt-Vorlage (Platzhalter: {tone_instruction}, {extra_instruction}, {text}):"
+        )
+        outer.addWidget(prompt_label)
+        self._reply_prompt = QPlainTextEdit(module_settings.prompt or DEFAULT_REPLY_PROMPT)
+        outer.addWidget(self._reply_prompt)
         return widget
 
     def _build_modules_tab(self) -> QWidget:
@@ -128,9 +201,7 @@ class SettingsDialog(QDialog):
 
         lines = []
         for module in self._registry.all():
-            action_count = len(module.actions())
-            suffix = f" ({action_count} Aktionen)" if action_count else ""
-            lines.append(f"• {module.label} [{module.id}]{suffix}")
+            lines.append(f"• {module.label} [{module.id}]")
 
         label = QLabel(
             "Registrierte Module:\n\n" + "\n".join(lines) + "\n\n"
@@ -151,12 +222,24 @@ class SettingsDialog(QDialog):
         self._config.hotkey = self._hotkey_input.text().strip() or DEFAULT_HOTKEY
         self._config.openai_default_model = self._default_model.currentText()
 
-        translator_settings = self._config.get_module_settings(
-            "translator",
-            DEFAULT_TRANSLATOR_PROMPT,
-        )
-        translator_settings.model = self._translator_model.currentText()
-        translator_settings.prompt = self._translator_prompt.toPlainText().strip() or DEFAULT_TRANSLATOR_PROMPT
+        translator = self._config.get_module_settings("translator", DEFAULT_TRANSLATOR_PROMPT)
+        translator.model = self._translator_model.currentText()
+        translator.prompt = self._translator_prompt.toPlainText().strip() or DEFAULT_TRANSLATOR_PROMPT
+        selected_langs = [
+            code for code, checkbox in self._translator_lang_checkboxes.items()
+            if checkbox.isChecked()
+        ]
+        if not selected_langs:
+            selected_langs = list(DEFAULT_LANGUAGES)
+        translator.languages = selected_langs
+
+        rewriter = self._config.get_module_settings("rewriter", DEFAULT_REWRITER_PROMPT)
+        rewriter.model = self._rewriter_model.currentText()
+        rewriter.prompt = self._rewriter_prompt.toPlainText().strip() or DEFAULT_REWRITER_PROMPT
+
+        reply = self._config.get_module_settings("reply", DEFAULT_REPLY_PROMPT)
+        reply.model = self._reply_model.currentText()
+        reply.prompt = self._reply_prompt.toPlainText().strip() or DEFAULT_REPLY_PROMPT
 
         api_key = self._api_key_input.text().strip()
         if api_key:
