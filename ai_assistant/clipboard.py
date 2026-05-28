@@ -37,9 +37,9 @@ def _xclip_env(xclip_path: str) -> dict[str, str]:
 
 
 class ClipboardManager:
-    PRE_COPY_WAIT_S = 0.2
-    POLL_INTERVAL_S = 0.05
-    POLL_TIMEOUT_S = 1.5
+    PRE_COPY_WAIT_S = 0.03
+    POLL_INTERVAL_S = 0.015
+    POLL_TIMEOUT_S = 0.7
 
     def __init__(self) -> None:
         self._keyboard = Controller()

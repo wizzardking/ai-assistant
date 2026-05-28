@@ -29,11 +29,16 @@ class MenuNode:
         return not self.children
 
 
+DISPLAY_CLIPBOARD = "clipboard"
+DISPLAY_WINDOW = "window"
+
+
 @runtime_checkable
 class Module(Protocol):
     id: str
     icon: str
     label: str
+    display_mode: str  # "clipboard" or "window"
 
     def menu(self, settings: ModuleSettings) -> tuple[MenuNode, ...]: ...
 

@@ -8,6 +8,7 @@ class SettingsModule:
     id = "settings"
     icon = str(assets_dir() / "settings.svg")
     label = "Einstellungen"
+    display_mode = "window"
 
     def menu(self, settings: ModuleSettings) -> tuple[MenuNode, ...]:
         return ()

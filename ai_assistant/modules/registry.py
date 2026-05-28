@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from ai_assistant.modules.base import Module
+from ai_assistant.modules.explain import ExplainModule
 from ai_assistant.modules.reply import ReplyModule
 from ai_assistant.modules.rewriter import RewriterModule
 from ai_assistant.modules.settings import SettingsModule
+from ai_assistant.modules.summarize import SummarizeModule
 from ai_assistant.modules.translator import TranslatorModule
 
 
@@ -26,5 +28,7 @@ def create_default_registry() -> ModuleRegistry:
     registry.register(TranslatorModule())
     registry.register(RewriterModule())
     registry.register(ReplyModule())
+    registry.register(SummarizeModule())
+    registry.register(ExplainModule())
     registry.register(SettingsModule())
     return registry
