@@ -30,6 +30,7 @@ class HotkeyListener:
         self.start()
 
     def _on_hotkey(self) -> None:
+        logger.debug("Hotkey triggered")
         try:
             self._callback()
         except Exception:

@@ -26,10 +26,15 @@ class IconHitTarget:
     label: str
 
 
+def _close_icon_path() -> str:
+    from ai_assistant.modules.base import assets_dir
+
+    return str(assets_dir() / "close.svg")
+
+
 class RadialMenu(QWidget):
     module_selected = pyqtSignal(str, str)
     module_interactive = pyqtSignal(str)
-    dismissed = pyqtSignal()
 
     BACKGROUND_ALPHA = 180
     ICON_BG = QColor(30, 30, 30, 220)
@@ -41,10 +46,11 @@ class RadialMenu(QWidget):
             None,
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool,
+            | Qt.WindowType.Popup,
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setMouseTracking(True)
 
         self._modules: list[Module] = []
         self._layout = compute_radial_layout(1)
@@ -65,12 +71,11 @@ class RadialMenu(QWidget):
         self.show()
         self.raise_()
         self.activateWindow()
-        self.setFocus()
+        self.setFocus(Qt.FocusReason.PopupFocusReason)
 
     def close_menu(self) -> None:
         if self.isVisible():
             self.hide()
-            self.dismissed.emit()
 
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key.Key_Escape:
@@ -84,6 +89,10 @@ class RadialMenu(QWidget):
 
         target = self._target_at(event.position().toPoint())
         if target is None:
+            self.close_menu()
+            return
+
+        if target.kind == "close":
             self.close_menu()
             return
 
@@ -121,22 +130,10 @@ class RadialMenu(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        local_center_x = self._center_x - self.x()
-        local_center_y = self._center_y - self.y()
-
         for target in self._hit_targets:
             x, y, w, h = target.rect
             hovered = self._hover_target == target
             self._draw_icon_button(painter, target.icon_path, x, y, w, h, hovered)
-
-        painter.setPen(QColor(255, 255, 255, 40))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawEllipse(
-            int(local_center_x - 6),
-            int(local_center_y - 6),
-            12,
-            12,
-        )
 
     def _draw_icon_button(
         self,
@@ -187,6 +184,20 @@ class RadialMenu(QWidget):
 
     def _rebuild_hit_targets(self) -> None:
         self._hit_targets = []
+
+        close_size = max(28, self._layout.icon_size - 12)
+        close_rect = self._icon_rect(self._center_x, self._center_y, close_size)
+        self._hit_targets.append(
+            IconHitTarget(
+                kind="close",
+                module_id="",
+                action_id=None,
+                rect=close_rect,
+                icon_path=_close_icon_path(),
+                label="Schließen",
+            )
+        )
+
         positions = circle_positions(
             len(self._modules),
             self._center_x,

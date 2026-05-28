@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import logging
 
-from PyQt6.QtCore import QTimer
-from PyQt6.QtGui import QCursor, QPainter
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtGui import QCursor
+from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from ai_assistant.clipboard import ClipboardManager
 from ai_assistant.config import load_config
@@ -18,8 +18,11 @@ from ai_assistant.worker import ModuleWorker
 logger = logging.getLogger(__name__)
 
 
-class AppController:
+class AppController(QObject):
+    hotkey_triggered = pyqtSignal()
+
     def __init__(self, app: QApplication) -> None:
+        super().__init__()
         self._app = app
         self._config = load_config()
         self._registry = create_default_registry()
@@ -31,11 +34,11 @@ class AppController:
         self._selected_text = ""
         self._cursor_x = 0
         self._cursor_y = 0
-        self._menu_open = False
+        self._worker: ModuleWorker | None = None
 
         self._radial_menu.module_selected.connect(self._on_module_selected)
         self._radial_menu.module_interactive.connect(self._on_module_interactive)
-        self._radial_menu.dismissed.connect(self._on_menu_dismissed)
+        self.hotkey_triggered.connect(self._open_menu)
 
         self._register_hotkey()
 
@@ -46,51 +49,46 @@ class AppController:
         self._hotkey.start()
 
     def _on_hotkey(self) -> None:
-        QTimer.singleShot(0, self._toggle_menu)
+        self.hotkey_triggered.emit()
 
-    def _toggle_menu(self) -> None:
-        if self._menu_open:
-            self._radial_menu.close_menu()
+    def _open_menu(self) -> None:
+        if self._radial_menu.isVisible():
+            logger.debug("Menu already open, ignoring hotkey")
             return
 
         cursor = QCursor.pos()
         self._cursor_x = cursor.x()
         self._cursor_y = cursor.y()
 
-        selected, _previous = self._clipboard.capture_selection()
+        try:
+            selected, _previous = self._clipboard.capture_selection()
+        except Exception:
+            logger.exception("Clipboard capture failed")
+            selected = ""
+
         self._selected_text = selected
+        logger.info("Opening radial menu (captured %d chars)", len(selected))
 
-        if not selected:
-            self._status.show_at(
-                self._cursor_x,
-                self._cursor_y,
-                StatusOverlay.INFO,
-                StatusOverlay.icon_path("error"),
-                "Kein Text ausgewählt – Einstellungen weiterhin verfügbar",
-            )
-
-        self._menu_open = True
+        modules = self._registry.all()
         self._radial_menu.show_at(
             self._cursor_x,
             self._cursor_y,
-            self._registry.all(),
+            modules,
         )
 
-    def _on_menu_dismissed(self) -> None:
-        self._menu_open = False
-
     def _on_module_interactive(self, module_id: str) -> None:
-        self._menu_open = False
         if module_id == "settings":
             self._open_settings()
 
     def _on_module_selected(self, module_id: str, action_id: str) -> None:
-        self._menu_open = False
+        logger.info("Module selected: %s/%s (text=%d chars)", module_id, action_id, len(self._selected_text))
         module = self._registry.get(module_id)
         if module is None:
+            logger.warning("Module %r not found", module_id)
             return
 
         if not self._selected_text.strip():
+            logger.info("No text – showing error status")
             self._status.show_at(
                 self._cursor_x,
                 self._cursor_y,
@@ -104,6 +102,7 @@ class AppController:
         if not settings.model:
             settings.model = self._config.openai_default_model
 
+        logger.info("Running module %s with model %s", module_id, settings.model)
         self._status.show_at(
             self._cursor_x,
             self._cursor_y,
@@ -116,9 +115,11 @@ class AppController:
         worker.finished_ok.connect(self._on_module_success)
         worker.finished_error.connect(self._on_module_error)
         worker.finished.connect(worker.deleteLater)
+        self._worker = worker
         worker.start()
 
     def _on_module_success(self, result: str) -> None:
+        logger.info("Module finished OK (%d chars)", len(result))
         self._clipboard.write_text(result)
         self._status.show_at(
             self._cursor_x,
@@ -129,6 +130,7 @@ class AppController:
         )
 
     def _on_module_error(self, message: str) -> None:
+        logger.error("Module failed: %s", message)
         self._status.show_at(
             self._cursor_x,
             self._cursor_y,
@@ -136,6 +138,7 @@ class AppController:
             StatusOverlay.icon_path("error"),
             message,
         )
+        QMessageBox.warning(None, "AI Assistant – Fehler", message)
 
     def _open_settings(self) -> None:
         dialog = SettingsDialog(self._config, self._registry)
