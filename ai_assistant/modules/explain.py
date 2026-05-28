@@ -10,6 +10,7 @@ class ExplainModule:
     icon = str(assets_dir() / "explain.svg")
     label = "Erklären"
     display_mode = "window"
+    requires_selection = True
 
     def menu(self, settings: ModuleSettings) -> tuple[MenuNode, ...]:
         return ()

@@ -25,15 +25,21 @@ from PyQt6.QtWidgets import (
 
 from ai_assistant.config import (
     ALL_LANGUAGES,
+    AVAILABLE_IMAGE_MODELS,
     AVAILABLE_MODELS,
     AppConfig,
+    DEFAULT_CHAT_SYSTEM_PROMPT,
     DEFAULT_EXPLAIN_PROMPT,
     DEFAULT_HOTKEY,
+    DEFAULT_IMAGE_MODEL,
+    DEFAULT_IMAGE_PROMPT,
+    DEFAULT_IMAGE_SIZE,
     DEFAULT_LANGUAGES,
     DEFAULT_REPLY_PROMPT,
     DEFAULT_REWRITER_PROMPT,
     DEFAULT_SUMMARIZE_PROMPT,
     DEFAULT_TRANSLATOR_PROMPT,
+    IMAGE_SIZES,
     save_config,
 )
 from ai_assistant.modules.registry import ModuleRegistry
@@ -62,6 +68,8 @@ class SettingsDialog(QDialog):
         self._tabs.addTab(self._build_reply_tab(), "Antwort verfassen")
         self._tabs.addTab(self._build_summarize_tab(), "Zusammenfassen")
         self._tabs.addTab(self._build_explain_tab(), "Erklären")
+        self._tabs.addTab(self._build_image_tab(), "Bildgenerierung")
+        self._tabs.addTab(self._build_chat_tab(), "Chat")
         self._tabs.addTab(self._build_modules_tab(), "Module")
 
         buttons = QDialogButtonBox(
@@ -255,6 +263,65 @@ class SettingsDialog(QDialog):
         outer.addWidget(self._explain_prompt)
         return widget
 
+    def _build_image_tab(self) -> QWidget:
+        widget = QWidget()
+        outer = QVBoxLayout(widget)
+
+        module_settings = self._config.get_module_settings(
+            "image_generate",
+            DEFAULT_IMAGE_PROMPT,
+        )
+        if not module_settings.model or module_settings.model not in AVAILABLE_IMAGE_MODELS:
+            module_settings.model = DEFAULT_IMAGE_MODEL
+        if not module_settings.image_size:
+            module_settings.image_size = DEFAULT_IMAGE_SIZE
+
+        form = QFormLayout()
+        outer.addLayout(form)
+
+        self._image_model = QComboBox()
+        self._image_model.addItems(AVAILABLE_IMAGE_MODELS)
+        self._image_model.setEditable(True)
+        self._image_model.setCurrentText(module_settings.model)
+        form.addRow("Modell:", self._image_model)
+
+        self._image_size = QComboBox()
+        self._image_size.addItems(IMAGE_SIZES)
+        if module_settings.image_size in IMAGE_SIZES:
+            self._image_size.setCurrentText(module_settings.image_size)
+        form.addRow("Bildgröße:", self._image_size)
+
+        prompt_label = QLabel("Prompt-Vorlage (Platzhalter: {prompt}):")
+        outer.addWidget(prompt_label)
+        self._image_prompt = QPlainTextEdit(module_settings.prompt or DEFAULT_IMAGE_PROMPT)
+        outer.addWidget(self._image_prompt)
+        return widget
+
+    def _build_chat_tab(self) -> QWidget:
+        widget = QWidget()
+        outer = QVBoxLayout(widget)
+
+        module_settings = self._config.get_module_settings(
+            "chat",
+            DEFAULT_CHAT_SYSTEM_PROMPT,
+        )
+
+        form = QFormLayout()
+        outer.addLayout(form)
+
+        self._chat_model = QComboBox()
+        self._chat_model.addItems(AVAILABLE_MODELS)
+        if module_settings.model in AVAILABLE_MODELS:
+            self._chat_model.setCurrentText(module_settings.model)
+        form.addRow("Modell:", self._chat_model)
+
+        prompt_label = QLabel("System-Prompt (legt Tonalität und Verhalten fest):")
+        outer.addWidget(prompt_label)
+        existing_system = module_settings.system_prompt or module_settings.prompt or DEFAULT_CHAT_SYSTEM_PROMPT
+        self._chat_system_prompt = QPlainTextEdit(existing_system)
+        outer.addWidget(self._chat_system_prompt)
+        return widget
+
     def _build_modules_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -316,6 +383,16 @@ class SettingsDialog(QDialog):
         explain = self._config.get_module_settings("explain", DEFAULT_EXPLAIN_PROMPT)
         explain.model = self._explain_model.currentText()
         explain.prompt = self._explain_prompt.toPlainText().strip() or DEFAULT_EXPLAIN_PROMPT
+
+        image = self._config.get_module_settings("image_generate", DEFAULT_IMAGE_PROMPT)
+        image.model = self._image_model.currentText().strip() or DEFAULT_IMAGE_MODEL
+        image.image_size = self._image_size.currentText() or DEFAULT_IMAGE_SIZE
+        image.prompt = self._image_prompt.toPlainText().strip() or DEFAULT_IMAGE_PROMPT
+
+        chat = self._config.get_module_settings("chat", DEFAULT_CHAT_SYSTEM_PROMPT)
+        chat.model = self._chat_model.currentText()
+        chat.system_prompt = self._chat_system_prompt.toPlainText().strip() or DEFAULT_CHAT_SYSTEM_PROMPT
+        chat.prompt = chat.system_prompt
 
         api_key = self._api_key_input.text().strip()
         if api_key:

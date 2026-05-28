@@ -246,6 +246,13 @@ class RadialMenu(QWidget):
             )
             return
 
+        # If the module exposes exactly one leaf, skip the intermediate sub-menu
+        # and activate that leaf directly (useful for image generation etc.).
+        if len(children) == 1 and children[0].is_leaf:
+            self._path = [module.id]
+            self._activate_node(children[0])
+            return
+
         self._path = [module.id]
         self._stack.append(children)
         self._refresh_layer()

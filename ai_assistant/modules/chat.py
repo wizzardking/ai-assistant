@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from ai_assistant.config import ModuleSettings
+from ai_assistant.config import DEFAULT_CHAT_SYSTEM_PROMPT, ModuleSettings
 from ai_assistant.modules.base import MenuNode, assets_dir
 
 
-class SettingsModule:
-    id = "settings"
-    icon = str(assets_dir() / "settings.svg")
-    label = "Einstellungen"
+class ChatModule:
+    """Interactive module: opens a free-form chat dialog handled by the controller."""
+
+    id = "chat"
+    icon = str(assets_dir() / "chat.svg")
+    label = "Chat"
     display_mode = "window"
     requires_selection = False
 
@@ -15,7 +17,7 @@ class SettingsModule:
         return ()
 
     def default_prompt(self) -> str:
-        return ""
+        return DEFAULT_CHAT_SYSTEM_PROMPT
 
     def is_interactive(self) -> bool:
         return True
@@ -27,4 +29,6 @@ class SettingsModule:
         settings: ModuleSettings,
         extra_input: str = "",
     ) -> str:
+        # The chat module is interactive; the AppController opens ChatWindow
+        # instead of calling run() through the normal pipeline.
         return ""

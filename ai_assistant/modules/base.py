@@ -31,6 +31,7 @@ class MenuNode:
 
 DISPLAY_CLIPBOARD = "clipboard"
 DISPLAY_WINDOW = "window"
+DISPLAY_IMAGE = "image"
 
 
 @runtime_checkable
@@ -38,7 +39,8 @@ class Module(Protocol):
     id: str
     icon: str
     label: str
-    display_mode: str  # "clipboard" or "window"
+    display_mode: str  # "clipboard" | "window" | "image"
+    requires_selection: bool  # if False, the module runs without selected text
 
     def menu(self, settings: ModuleSettings) -> tuple[MenuNode, ...]: ...
 
@@ -50,7 +52,7 @@ class Module(Protocol):
         path: tuple[str, ...],
         settings: ModuleSettings,
         extra_input: str = "",
-    ) -> str: ...
+    ): ...  # may return str or bytes
 
     def is_interactive(self) -> bool: ...
 

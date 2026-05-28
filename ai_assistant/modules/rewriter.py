@@ -22,6 +22,7 @@ class RewriterModule:
     icon = str(assets_dir() / "rewrite.svg")
     label = "Umschreiben"
     display_mode = "clipboard"
+    requires_selection = True
 
     def menu(self, settings: ModuleSettings) -> tuple[MenuNode, ...]:
         nodes: list[MenuNode] = []

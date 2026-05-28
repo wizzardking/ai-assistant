@@ -42,6 +42,7 @@ class ReplyModule:
     icon = str(assets_dir() / "reply.svg")
     label = "Antwort verfassen"
     display_mode = "clipboard"
+    requires_selection = True
 
     def menu(self, settings: ModuleSettings) -> tuple[MenuNode, ...]:
         nodes: list[MenuNode] = []

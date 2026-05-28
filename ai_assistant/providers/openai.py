@@ -1,19 +1,26 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+from typing import Any
 
 from openai import AsyncOpenAI
 
 from ai_assistant.secrets import get_openai_api_key
 
 
+def _require_client() -> AsyncOpenAI:
+    api_key = get_openai_api_key()
+    if not api_key:
+        raise RuntimeError(
+            "Kein OpenAI API-Key hinterlegt. Bitte in den Einstellungen konfigurieren."
+        )
+    return AsyncOpenAI(api_key=api_key)
+
+
 class OpenAIProvider:
     async def complete(self, prompt: str, model: str) -> str:
-        api_key = get_openai_api_key()
-        if not api_key:
-            raise RuntimeError("Kein OpenAI API-Key hinterlegt. Bitte in den Einstellungen konfigurieren.")
-
-        client = AsyncOpenAI(api_key=api_key)
+        client = _require_client()
         response = await client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
@@ -23,9 +30,45 @@ class OpenAIProvider:
             raise RuntimeError("Leere Antwort von OpenAI erhalten.")
         return content.strip()
 
+    async def chat(self, messages: list[dict[str, Any]], model: str) -> str:
+        """Send a message history (list of {role, content} dicts) and return the assistant reply."""
+        client = _require_client()
+        response = await client.chat.completions.create(model=model, messages=messages)
+        content = response.choices[0].message.content
+        if not content:
+            raise RuntimeError("Leere Antwort von OpenAI erhalten.")
+        return content.strip()
+
+    async def generate_image(
+        self,
+        prompt: str,
+        model: str = "gpt-image-2",
+        size: str = "1024x1024",
+    ) -> bytes:
+        client = _require_client()
+        response = await client.images.generate(
+            model=model,
+            prompt=prompt,
+            size=size,
+            n=1,
+        )
+        # OpenAI returns base64 in `b64_json` when no `response_format` URL is requested
+        data = response.data[0]
+        b64 = getattr(data, "b64_json", None)
+        if b64:
+            return base64.b64decode(b64)
+        url = getattr(data, "url", None)
+        if url:
+            # Fallback: fetch image via httpx
+            import httpx
+            async with httpx.AsyncClient() as http:
+                r = await http.get(url)
+                r.raise_for_status()
+                return r.content
+        raise RuntimeError("Bild-Antwort enthielt weder Base64 noch URL.")
+
 
 def run_async(coro):
-    """Run async coroutine from sync context, reusing event loop if present."""
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:

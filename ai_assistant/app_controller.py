@@ -7,10 +7,16 @@ from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import QApplication, QInputDialog, QLineEdit, QMessageBox
 
 from ai_assistant.clipboard import ClipboardManager
-from ai_assistant.config import ModuleSettings, load_config
+from ai_assistant.config import (
+    DEFAULT_CHAT_SYSTEM_PROMPT,
+    ModuleSettings,
+    load_config,
+)
 from ai_assistant.hotkey import HotkeyListener
-from ai_assistant.modules.base import DISPLAY_WINDOW, MenuNode
+from ai_assistant.modules.base import DISPLAY_IMAGE, DISPLAY_WINDOW, MenuNode
 from ai_assistant.modules.registry import create_default_registry
+from ai_assistant.ui.chat_window import ChatWindow
+from ai_assistant.ui.image_result_window import ImageResultWindow
 from ai_assistant.ui.radial_menu import RadialMenu
 from ai_assistant.ui.result_window import ResultWindow
 from ai_assistant.ui.settings_dialog import SettingsDialog
@@ -41,6 +47,8 @@ class AppController(QObject):
         self._result_windows: list[ResultWindow] = []
         self._capture_worker: ClipboardCaptureWorker | None = None
         self._capture_done = False
+        self._active_extra_input = ""
+        self._chat_windows: list[ChatWindow] = []
 
         self._radial_menu.leaf_selected.connect(self._on_leaf_selected)
         self._radial_menu.module_interactive.connect(self._on_module_interactive)
@@ -94,6 +102,8 @@ class AppController(QObject):
     def _on_module_interactive(self, module_id: str) -> None:
         if module_id == "settings":
             self._open_settings()
+        elif module_id == "chat":
+            self._open_chat()
 
     def _on_leaf_selected(self, module_id: str, path: tuple, leaf: MenuNode) -> None:
         logger.info(
@@ -105,21 +115,23 @@ class AppController(QObject):
             logger.warning("Module %r not found", module_id)
             return
 
-        # The clipboard capture runs in the background; wait briefly if the
-        # user clicked an action before it had a chance to finish.
-        if not self._capture_done and self._capture_worker is not None:
-            logger.info("Waiting for clipboard capture to finish...")
-            self._capture_worker.wait(2000)
+        requires_selection = getattr(module, "requires_selection", True)
+        if requires_selection:
+            # The clipboard capture runs in the background; wait briefly if the
+            # user clicked an action before it had a chance to finish.
+            if not self._capture_done and self._capture_worker is not None:
+                logger.info("Waiting for clipboard capture to finish...")
+                self._capture_worker.wait(2000)
 
-        if not self._selected_text.strip():
-            self._status.show_at(
-                self._cursor_x,
-                self._cursor_y,
-                StatusOverlay.ERROR,
-                StatusOverlay.icon_path("error"),
-                "Kein Text ausgewählt",
-            )
-            return
+            if not self._selected_text.strip():
+                self._status.show_at(
+                    self._cursor_x,
+                    self._cursor_y,
+                    StatusOverlay.ERROR,
+                    StatusOverlay.icon_path("error"),
+                    "Kein Text ausgewählt",
+                )
+                return
 
         extra_input = ""
         if leaf.needs_extra_input:
@@ -134,6 +146,7 @@ class AppController(QObject):
 
         logger.info("Running module %s (model=%s, path=%s)", module_id, settings.model, path)
         self._active_module_id = module_id
+        self._active_extra_input = extra_input
         self._status.show_at(
             self._cursor_x,
             self._cursor_y,
@@ -141,7 +154,8 @@ class AppController(QObject):
             StatusOverlay.icon_path("loading"),
         )
 
-        coro = module.run(self._selected_text, tuple(path), settings, extra_input)
+        text_for_run = self._selected_text if requires_selection else ""
+        coro = module.run(text_for_run, tuple(path), settings, extra_input)
         worker = ModuleWorker(coro)
         worker.finished_ok.connect(self._on_module_success)
         worker.finished_error.connect(self._on_module_error)
@@ -160,17 +174,26 @@ class AppController(QObject):
             return None
         return text or ""
 
-    def _on_module_success(self, result: str) -> None:
-        logger.info("Module finished OK (%d chars)", len(result))
+    def _on_module_success(self, result) -> None:
         module = self._registry.get(self._active_module_id or "")
         display_mode = getattr(module, "display_mode", "clipboard")
 
-        if display_mode == DISPLAY_WINDOW and module is not None:
+        if display_mode == DISPLAY_IMAGE and module is not None:
+            size = len(result) if isinstance(result, (bytes, bytearray)) else 0
+            logger.info("Image module finished OK (%d bytes)", size)
             self._status.hide()
-            self._show_result_window(module.label, result)
+            self._show_image_window(self._active_extra_input, bytes(result))
             return
 
-        self._clipboard.write_text(result)
+        text_result = result if isinstance(result, str) else str(result)
+        logger.info("Module finished OK (%d chars)", len(text_result))
+
+        if display_mode == DISPLAY_WINDOW and module is not None:
+            self._status.hide()
+            self._show_result_window(module.label, text_result)
+            return
+
+        self._clipboard.write_text(text_result)
         self._status.show_at(
             self._cursor_x,
             self._cursor_y,
@@ -178,6 +201,31 @@ class AppController(QObject):
             StatusOverlay.icon_path("done"),
             "In Zwischenablage kopiert",
         )
+
+    def _show_image_window(self, prompt: str, image_bytes: bytes) -> None:
+        window = ImageResultWindow(prompt=prompt, image_bytes=image_bytes)
+        window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        window.finished.connect(lambda _=None, w=window: self._result_windows.remove(w) if w in self._result_windows else None)
+        self._result_windows.append(window)
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+    def _open_chat(self) -> None:
+        module = self._registry.get("chat")
+        if module is None:
+            return
+        settings = self._config.get_module_settings("chat", module.default_prompt())
+        if not settings.model:
+            settings.model = self._config.openai_default_model
+        system_prompt = settings.system_prompt or settings.prompt or DEFAULT_CHAT_SYSTEM_PROMPT
+        window = ChatWindow(model=settings.model, system_prompt=system_prompt)
+        window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        window.finished.connect(lambda _=None, w=window: self._chat_windows.remove(w) if w in self._chat_windows else None)
+        self._chat_windows.append(window)
+        window.show()
+        window.raise_()
+        window.activateWindow()
 
     def _show_result_window(self, title: str, result: str) -> None:
         window = ResultWindow(

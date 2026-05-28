@@ -12,8 +12,12 @@ CONFIG_PATH = CONFIG_DIR / "config.json"
 DEFAULT_HOTKEY = "mouse:button11"
 DEFAULT_HOTKEYS: list[str] = ["mouse:button11"]
 AVAILABLE_MODELS = ["gpt-5.5", "gpt-5.4-nano"]
+AVAILABLE_IMAGE_MODELS = ["gpt-image-2", "gpt-image-1"]
 DEFAULT_MODEL = "gpt-5.5"
+DEFAULT_IMAGE_MODEL = "gpt-image-2"
 DEFAULT_PROVIDER = "openai"
+IMAGE_SIZES = ["1024x1024", "1024x1792", "1792x1024"]
+DEFAULT_IMAGE_SIZE = "1024x1024"
 
 ALL_LANGUAGES: dict[str, str] = {
     "de": "Deutsch",
@@ -58,10 +62,15 @@ DEFAULT_REWRITER_PROMPT = (
 )
 
 DEFAULT_REPLY_PROMPT = (
-    "Verfasse eine Antwort auf die folgende Nachricht. {tone_instruction}"
+    "Du verfasst eine Antwort im Namen von Robin Hansson. "
+    "Falls die folgende Nachricht ein kompletter Gesprächsverlauf ist, "
+    "ist Robin Hansson die antwortende Person – ignoriere also bisherige "
+    "Nachrichten von Robin Hansson selbst und antworte nur auf die zuletzt "
+    "an ihn gerichtete Nachricht. "
+    "{tone_instruction}"
     "Behalte die Sprache des Originals bei. "
     "{extra_instruction}"
-    "Gib nur die Antwort zurück, ohne Erklärung oder Anrede-Vorspann.\n\n"
+    "Gib nur die Antwort zurück, ohne Meta-Kommentar oder Erklärung.\n\n"
     "Nachricht:\n{text}"
 )
 
@@ -80,12 +89,21 @@ DEFAULT_EXPLAIN_PROMPT = (
     "ohne Vorspann oder Meta-Kommentar.\n\n{text}"
 )
 
+DEFAULT_IMAGE_PROMPT = "{prompt}"
+
+DEFAULT_CHAT_SYSTEM_PROMPT = (
+    "Du bist ein hilfsbereiter Assistent. Antworte präzise, faktenbasiert und "
+    "auf Deutsch (oder in der Sprache der Frage)."
+)
+
 
 class ModuleSettings(BaseModel):
     provider: str = DEFAULT_PROVIDER
     model: str = DEFAULT_MODEL
     prompt: str = ""
     languages: list[str] = Field(default_factory=lambda: list(DEFAULT_LANGUAGES))
+    image_size: str = DEFAULT_IMAGE_SIZE
+    system_prompt: str = ""
 
 
 class AppConfig(BaseModel):

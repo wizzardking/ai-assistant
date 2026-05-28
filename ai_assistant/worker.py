@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class ModuleWorker(QThread):
-    finished_ok = pyqtSignal(str)
+    finished_ok = pyqtSignal(object)
     finished_error = pyqtSignal(str)
 
     def __init__(self, coroutine) -> None:

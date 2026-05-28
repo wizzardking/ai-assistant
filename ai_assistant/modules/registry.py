@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from ai_assistant.modules.base import Module
+from ai_assistant.modules.chat import ChatModule
 from ai_assistant.modules.explain import ExplainModule
+from ai_assistant.modules.image_generate import ImageGenerateModule
 from ai_assistant.modules.reply import ReplyModule
 from ai_assistant.modules.rewriter import RewriterModule
 from ai_assistant.modules.settings import SettingsModule
@@ -30,5 +32,7 @@ def create_default_registry() -> ModuleRegistry:
     registry.register(ReplyModule())
     registry.register(SummarizeModule())
     registry.register(ExplainModule())
+    registry.register(ImageGenerateModule())
+    registry.register(ChatModule())
     registry.register(SettingsModule())
     return registry

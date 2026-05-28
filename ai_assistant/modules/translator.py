@@ -38,6 +38,7 @@ class TranslatorModule:
     icon = str(assets_dir() / "translate.svg")
     label = "Übersetzer"
     display_mode = "clipboard"
+    requires_selection = True
 
     def menu(self, settings: ModuleSettings) -> tuple[MenuNode, ...]:
         languages = settings.languages or list(DEFAULT_LANGUAGES)
