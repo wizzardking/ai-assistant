@@ -16,6 +16,21 @@ AVAILABLE_IMAGE_MODELS = ["gpt-image-2", "gpt-image-1"]
 DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_IMAGE_MODEL = "gpt-image-2"
 DEFAULT_PROVIDER = "openai"
+
+# Conservative context-window estimates per chat model (in tokens). When a
+# conversation grows beyond this, the chat UI asks the user to start a new
+# chat instead of silently truncating.
+MODEL_TOKEN_LIMITS: dict[str, int] = {
+    "gpt-5.5": 128_000,
+    "gpt-5.4-nano": 128_000,
+}
+DEFAULT_TOKEN_LIMIT = 128_000
+# Tokens we reserve for the model's response when evaluating the prompt size.
+RESPONSE_TOKEN_RESERVE = 2_048
+
+
+def token_limit_for(model: str) -> int:
+    return MODEL_TOKEN_LIMITS.get(model, DEFAULT_TOKEN_LIMIT)
 IMAGE_SIZES = [
     "1024x1024",
     "1024x1536",
