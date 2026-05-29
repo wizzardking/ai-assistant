@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Autostart-Wrapper für den AI Assistant unter Windows.
 
@@ -75,12 +75,16 @@ try {
 
     Write-Log "Starte AI Assistant ($VenvPython)"
     # Start-Process, damit das Skript zurückkehrt; pythonw verhindert Konsole.
+    # stdout und stderr müssen in unterschiedliche Dateien, sonst lehnt
+    # Start-Process die Redirection ab.
+    $StdoutLog = Join-Path $LogDir 'app.stdout.log'
+    $StderrLog = Join-Path $LogDir 'app.stderr.log'
     Start-Process -FilePath $VenvPython `
         -ArgumentList @('-m', 'ai_assistant.main') `
         -WorkingDirectory $RepoPath `
         -WindowStyle Hidden `
-        -RedirectStandardOutput $LogFile `
-        -RedirectStandardError $LogFile
+        -RedirectStandardOutput $StdoutLog `
+        -RedirectStandardError $StderrLog
 } finally {
     Pop-Location
 }

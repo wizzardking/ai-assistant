@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Installiert den AI-Assistant-Autostart unter Windows.
 
