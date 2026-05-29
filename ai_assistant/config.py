@@ -24,11 +24,11 @@ CONFIG_PATH = CONFIG_DIR / "config.json"
 # combo because mouse drivers (Logitech Options, etc.) often hijack extra
 # mouse buttons before they reach the OS.
 if sys.platform.startswith("win"):
-    DEFAULT_HOTKEY = "<ctrl>+<shift>+<alt>+<space>"
-    DEFAULT_HOTKEYS: list[str] = ["<ctrl>+<shift>+<alt>+<space>"]
+    DEFAULT_HOTKEY = "<shift>+<ctrl>+<space>"
+    DEFAULT_HOTKEYS: list[str] = ["<shift>+<ctrl>+<space>"]
 else:
     DEFAULT_HOTKEY = "mouse:button11"
-    DEFAULT_HOTKEYS = ["mouse:button11"]
+    DEFAULT_HOTKEYS = ["mouse:button11", "<ctrl>+<shift>+<cmd>+<space>"]
 AVAILABLE_MODELS = ["gpt-5.5", "gpt-5.4-nano"]
 AVAILABLE_IMAGE_MODELS = ["gpt-image-2", "gpt-image-1"]
 DEFAULT_MODEL = "gpt-5.5"

@@ -56,6 +56,83 @@ else:
     VK_ALIASES = _VK_ALIASES_X11
 
 
+# Display-friendly labels for common VK codes (covers both X11 and Win32
+# tables from the alias maps above).
+_VK_DISPLAY: dict[int, str] = {
+    32: "Leertaste", 0x20: "Leertaste",
+    65505: "Shift", 65506: "Shift_R",
+    65507: "Strg", 65508: "Strg_R",
+    65511: "Meta", 65512: "Meta_R",
+    65513: "Alt", 65514: "AltGr",
+    65515: "Super", 65516: "Super_R",
+    65289: "Tab", 65293: "Enter", 65307: "Esc", 65288: "Backspace",
+    65470: "F1", 65471: "F2", 65472: "F3", 65473: "F4", 65474: "F5",
+    65475: "F6", 65476: "F7", 65477: "F8", 65478: "F9", 65479: "F10",
+    65480: "F11", 65481: "F12", 65482: "F13", 65483: "F14", 65484: "F15",
+    0x10: "Shift", 0xA0: "Shift_L", 0xA1: "Shift_R",
+    0x11: "Strg", 0xA2: "Strg_L", 0xA3: "Strg_R",
+    0x12: "Alt", 0xA4: "Alt_L", 0xA5: "Alt_R",
+    0x5B: "Win", 0x5C: "Win_R",
+    0x09: "Tab", 0x0D: "Enter", 0x1B: "Esc", 0x08: "Backspace",
+    0x70: "F1", 0x71: "F2", 0x72: "F3", 0x73: "F4", 0x74: "F5",
+    0x75: "F6", 0x76: "F7", 0x77: "F8", 0x78: "F9", 0x79: "F10",
+    0x7A: "F11", 0x7B: "F12", 0x7C: "F13", 0x7D: "F14", 0x7E: "F15",
+}
+
+
+def _vk_label(vk: int) -> str:
+    if vk in _VK_DISPLAY:
+        return _VK_DISPLAY[vk]
+    # Try reverse lookup against the active alias map.
+    for name, code in VK_ALIASES.items():
+        if code == vk and not name.endswith(("_l", "_r")):
+            return name.capitalize()
+    if 32 <= vk <= 126:
+        try:
+            return chr(vk).upper()
+        except Exception:
+            pass
+    return f"VK_{vk}"
+
+
+def format_hotkey(value: str) -> str:
+    """Pretty-print a hotkey string for the settings UI."""
+    if not value:
+        return ""
+    v = value.strip()
+    if not v:
+        return ""
+    if v.lower().startswith("mouse:"):
+        name = v.split(":", 1)[1]
+        nice = name.replace("button", "Maustaste ").replace("_", " ").strip()
+        return f"Maus: {nice}"
+    if v.lower().startswith("combo:"):
+        body = v.split(":", 1)[1]
+        labels = []
+        for part in body.split("+"):
+            part = part.strip()
+            if not part:
+                continue
+            if part.isdigit():
+                labels.append(_vk_label(int(part)))
+            else:
+                lookup = VK_ALIASES.get(part.lower())
+                labels.append(_vk_label(lookup) if lookup else part.capitalize())
+        return " + ".join(labels) if labels else v
+    # pynput "<ctrl>+<shift>+<space>"-style strings: render the bracketed
+    # tokens as friendly names.
+    rendered = []
+    for token in v.split("+"):
+        token = token.strip()
+        if token.startswith("<") and token.endswith(">"):
+            inner = token[1:-1].lower()
+            label = _VK_DISPLAY.get(VK_ALIASES.get(inner, -1)) or inner.capitalize()
+            rendered.append(label)
+        else:
+            rendered.append(token.upper() if len(token) == 1 else token.capitalize())
+    return " + ".join(rendered)
+
+
 def parse_combo(value: str) -> frozenset[int] | None:
     """Parse a `combo:` hotkey value into a set of X11 virtual key codes.
 
