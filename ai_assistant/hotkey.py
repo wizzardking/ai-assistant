@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from collections.abc import Callable, Iterable
 
 from pynput import keyboard, mouse
@@ -8,9 +9,10 @@ from pynput import keyboard, mouse
 logger = logging.getLogger(__name__)
 
 
-# Symbolic aliases for X11 key-codes that are common in modifier combos but
-# either don't have a pynput shortcut (e.g. Meta_L) or are easier to remember.
-VK_ALIASES: dict[str, int] = {
+# Symbolic aliases for virtual key codes used by the `combo:` hotkey syntax.
+# The values differ between operating systems: pynput emits X11 keysyms on
+# Linux and Win32 VK codes on Windows.
+_VK_ALIASES_X11: dict[str, int] = {
     "shift": 65505, "shift_l": 65505, "shift_r": 65506,
     "ctrl": 65507, "control": 65507, "ctrl_l": 65507, "control_l": 65507,
     "ctrl_r": 65508, "control_r": 65508,
@@ -26,6 +28,32 @@ VK_ALIASES: dict[str, int] = {
     "f11": 65480, "f12": 65481, "f13": 65482, "f14": 65483, "f15": 65484,
     "f16": 65485, "f17": 65486, "f18": 65487, "f19": 65488, "f20": 65489,
 }
+
+_VK_ALIASES_WIN32: dict[str, int] = {
+    "shift": 0x10, "shift_l": 0xA0, "shift_r": 0xA1,
+    "ctrl": 0x11, "control": 0x11, "ctrl_l": 0xA2, "control_l": 0xA2,
+    "ctrl_r": 0xA3, "control_r": 0xA3,
+    "alt": 0x12, "alt_l": 0xA4, "alt_r": 0xA5,
+    "win": 0x5B, "super": 0x5B, "super_l": 0x5B, "cmd": 0x5B,
+    "super_r": 0x5C, "cmd_r": 0x5C, "win_r": 0x5C,
+    "space": 0x20,
+    "tab": 0x09, "return": 0x0D, "enter": 0x0D, "esc": 0x1B, "escape": 0x1B,
+    "backspace": 0x08,
+    "f1": 0x70, "f2": 0x71, "f3": 0x72, "f4": 0x73, "f5": 0x74,
+    "f6": 0x75, "f7": 0x76, "f8": 0x77, "f9": 0x78, "f10": 0x79,
+    "f11": 0x7A, "f12": 0x7B, "f13": 0x7C, "f14": 0x7D, "f15": 0x7E,
+    "f16": 0x7F, "f17": 0x80, "f18": 0x81, "f19": 0x82, "f20": 0x83,
+}
+
+if sys.platform.startswith("win"):
+    VK_ALIASES: dict[str, int] = _VK_ALIASES_WIN32
+elif sys.platform == "darwin":
+    # macOS pynput uses its own VK; we expose the X11-style names so existing
+    # configs continue to parse, but `combo:` strings should generally be
+    # avoided on macOS in favour of plain `<ctrl>+<…>` notation.
+    VK_ALIASES = _VK_ALIASES_X11
+else:
+    VK_ALIASES = _VK_ALIASES_X11
 
 
 def parse_combo(value: str) -> frozenset[int] | None:
