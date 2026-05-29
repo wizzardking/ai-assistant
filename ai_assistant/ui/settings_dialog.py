@@ -14,6 +14,8 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -44,8 +46,10 @@ from ai_assistant.config import (
     IMAGE_SIZES,
     save_config,
 )
+from ai_assistant.hotkey import format_hotkey
 from ai_assistant.modules.registry import ModuleRegistry
 from ai_assistant.secrets import delete_openai_api_key, get_openai_api_key, set_openai_api_key
+from ai_assistant.ui.hotkey_capture_dialog import HotkeyCaptureDialog
 
 logger = logging.getLogger(__name__)
 
@@ -85,23 +89,72 @@ class SettingsDialog(QDialog):
         widget = QWidget()
         outer = QVBoxLayout(widget)
 
-        label = QLabel("Auslöser (alle gleichzeitig aktiv – einer pro Zeile):")
+        label = QLabel("Auslöser (alle aktiv parallel – beliebig viele):")
         outer.addWidget(label)
 
-        self._hotkeys_edit = QPlainTextEdit("\n".join(self._config.active_hotkeys()))
-        self._hotkeys_edit.setPlaceholderText(DEFAULT_HOTKEY)
-        outer.addWidget(self._hotkeys_edit, 1)
+        self._hotkey_list = QListWidget()
+        self._hotkey_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        for trigger in self._config.active_hotkeys():
+            self._add_hotkey_item(trigger)
+        outer.addWidget(self._hotkey_list, 1)
+
+        button_row = QHBoxLayout()
+        add_btn = QPushButton("Hotkey hinzufügen…")
+        add_btn.clicked.connect(self._on_add_hotkey)
+        button_row.addWidget(add_btn)
+
+        remove_btn = QPushButton("Entfernen")
+        remove_btn.clicked.connect(self._on_remove_hotkey)
+        button_row.addWidget(remove_btn)
+
+        reset_btn = QPushButton("Auf Standard zurücksetzen")
+        reset_btn.clicked.connect(self._on_reset_hotkeys)
+        button_row.addWidget(reset_btn)
+
+        button_row.addStretch()
+        outer.addLayout(button_row)
 
         hint = QLabel(
-            "Maus-Buttons: mouse:back, mouse:forward, mouse:middle, mouse:button8 … mouse:button30\n"
-            "Tastatur (pynput-Syntax): <f6>, <f13>, <ctrl>+<shift>+<space>, etc.\n"
-            "Tipp: scripts/identify_keyboard_key.py liefert die korrekte Bezeichnung\n"
-            "Autostart: ~/.config/autostart/ai-assistant.desktop"
+            "Im Aufnahme-Dialog wird genau das gespeichert, was du drückst – auch "
+            "Spezialtasten (z.B. die Smiley-Taste) werden anhand ihres Tasten-Codes "
+            "erkannt.\n"
+            "Ausgeschlossen sind: Mausbewegungen, linke/rechte Maustaste sowie Esc und Enter."
         )
         hint.setWordWrap(True)
         outer.addWidget(hint)
 
         return widget
+
+    def _add_hotkey_item(self, trigger: str) -> None:
+        if not trigger:
+            return
+        # Avoid duplicates.
+        for i in range(self._hotkey_list.count()):
+            existing = self._hotkey_list.item(i).data(Qt.ItemDataRole.UserRole)
+            if existing == trigger:
+                return
+        item = QListWidgetItem(format_hotkey(trigger) + f"   ({trigger})")
+        item.setData(Qt.ItemDataRole.UserRole, trigger)
+        self._hotkey_list.addItem(item)
+
+    def _on_add_hotkey(self) -> None:
+        dialog = HotkeyCaptureDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            value = dialog.hotkey().strip()
+            if value:
+                self._add_hotkey_item(value)
+                self._hotkey_list.setCurrentRow(self._hotkey_list.count() - 1)
+
+    def _on_remove_hotkey(self) -> None:
+        row = self._hotkey_list.currentRow()
+        if row >= 0:
+            self._hotkey_list.takeItem(row)
+
+    def _on_reset_hotkeys(self) -> None:
+        from ai_assistant.config import DEFAULT_HOTKEYS
+        self._hotkey_list.clear()
+        for trigger in DEFAULT_HOTKEYS:
+            self._add_hotkey_item(trigger)
 
     def _build_openai_tab(self) -> QWidget:
         widget = QWidget()
@@ -361,11 +414,11 @@ class SettingsDialog(QDialog):
         QMessageBox.information(self, "API-Key", "OpenAI API-Key wurde gelöscht.")
 
     def _save(self) -> None:
-        hotkey_lines = [
-            line.strip()
-            for line in self._hotkeys_edit.toPlainText().splitlines()
-            if line.strip()
-        ]
+        hotkey_lines: list[str] = []
+        for i in range(self._hotkey_list.count()):
+            value = self._hotkey_list.item(i).data(Qt.ItemDataRole.UserRole)
+            if value and value not in hotkey_lines:
+                hotkey_lines.append(value)
         if not hotkey_lines:
             hotkey_lines = [DEFAULT_HOTKEY]
         self._config.hotkeys = hotkey_lines
