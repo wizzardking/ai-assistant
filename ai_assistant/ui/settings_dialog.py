@@ -89,6 +89,20 @@ class SettingsDialog(QDialog):
         widget = QWidget()
         outer = QVBoxLayout(widget)
 
+        identity_form = QFormLayout()
+        self._user_name_input = QLineEdit(self._config.user_name)
+        self._user_name_input.setPlaceholderText("z.B. Max Muster – leer lassen für anonyme Antworten")
+        identity_form.addRow("Dein Name:", self._user_name_input)
+        identity_hint = QLabel(
+            'Wird im Modul "Antwort verfassen" als absendende Person eingesetzt, '
+            "damit das Tool versteht, aus wessen Sicht geantwortet werden soll."
+        )
+        identity_hint.setWordWrap(True)
+        identity_hint.setStyleSheet("color: #888;")
+        outer.addLayout(identity_form)
+        outer.addWidget(identity_hint)
+        outer.addSpacing(8)
+
         label = QLabel("Auslöser (alle aktiv parallel – beliebig viele):")
         outer.addWidget(label)
 
@@ -423,6 +437,7 @@ class SettingsDialog(QDialog):
             hotkey_lines = [DEFAULT_HOTKEY]
         self._config.hotkeys = hotkey_lines
         self._config.hotkey = hotkey_lines[0]
+        self._config.user_name = self._user_name_input.text().strip()
         self._config.openai_default_model = self._default_model.currentText()
 
         translator = self._config.get_module_settings("translator", DEFAULT_TRANSLATOR_PROMPT)
