@@ -5,6 +5,7 @@ from ai_assistant.config import (
     ModuleSettings,
     TONE_INSTRUCTIONS,
     TONES,
+    load_config,
 )
 from ai_assistant.modules.base import MenuNode, assets_dir
 from ai_assistant.providers.openai import OpenAIProvider
@@ -91,7 +92,29 @@ class ReplyModule:
                 f"des Nutzers: {extra_input.strip()}. "
             )
 
+        user_name = (load_config().user_name or "").strip()
+        if user_name:
+            user_name_clause = f" im Namen von {user_name}"
+            user_perspective_clause = (
+                f"ist {user_name} die antwortende Person – ignoriere also "
+                f"bisherige Nachrichten von {user_name} selbst und antworte "
+                "nur auf die zuletzt an ihn/sie gerichtete Nachricht. "
+            )
+        else:
+            user_name_clause = ""
+            user_perspective_clause = (
+                "antworte nur auf die letzte Nachricht aus Sicht des Empfängers. "
+            )
+
         prompt_template = settings.prompt or DEFAULT_REPLY_PROMPT
+        # Resolve identity placeholders first (str.replace handles missing
+        # placeholders gracefully so user-customised prompts aren't broken).
+        prompt_template = (
+            prompt_template
+            .replace("{user_name_clause}", user_name_clause)
+            .replace("{user_perspective_clause}", user_perspective_clause)
+            .replace("{user_name}", user_name)
+        )
         prompt = prompt_template.format(
             tone_instruction=tone_instruction,
             extra_instruction=extra_instruction,

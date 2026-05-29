@@ -103,17 +103,32 @@ DEFAULT_REWRITER_PROMPT = (
 )
 
 DEFAULT_REPLY_PROMPT = (
-    "Du verfasst eine Antwort im Namen von Robin Hansson. "
+    "Du verfasst eine Antwort{user_name_clause}. "
     "Falls die folgende Nachricht ein kompletter Gesprächsverlauf ist, "
-    "ist Robin Hansson die antwortende Person – ignoriere also bisherige "
-    "Nachrichten von Robin Hansson selbst und antworte nur auf die zuletzt "
-    "an ihn gerichtete Nachricht. "
+    "{user_perspective_clause}"
     "{tone_instruction}"
     "Behalte die Sprache des Originals bei. "
     "{extra_instruction}"
     "Gib nur die Antwort zurück, ohne Meta-Kommentar oder Erklärung.\n\n"
     "Nachricht:\n{text}"
 )
+
+# Older default that hardcoded "Robin Hansson"; we migrate this to a blank
+# prompt so the new default kicks in.
+_LEGACY_REPLY_PROMPTS: list[str] = [
+    (
+        "Du verfasst eine Antwort im Namen von Robin Hansson. "
+        "Falls die folgende Nachricht ein kompletter Gesprächsverlauf ist, "
+        "ist Robin Hansson die antwortende Person – ignoriere also bisherige "
+        "Nachrichten von Robin Hansson selbst und antworte nur auf die zuletzt "
+        "an ihn gerichtete Nachricht. "
+        "{tone_instruction}"
+        "Behalte die Sprache des Originals bei. "
+        "{extra_instruction}"
+        "Gib nur die Antwort zurück, ohne Meta-Kommentar oder Erklärung.\n\n"
+        "Nachricht:\n{text}"
+    ),
+]
 
 DEFAULT_SUMMARIZE_PROMPT = (
     "Erstelle eine prägnante Zusammenfassung des folgenden Textes auf Deutsch. "
@@ -152,6 +167,7 @@ class AppConfig(BaseModel):
     hotkey: str = DEFAULT_HOTKEY
     hotkeys: list[str] = Field(default_factory=lambda: list(DEFAULT_HOTKEYS))
     openai_default_model: str = DEFAULT_MODEL
+    user_name: str = ""
     modules: dict[str, ModuleSettings] = Field(default_factory=dict)
 
     def active_hotkeys(self) -> list[str]:
@@ -177,6 +193,23 @@ def ensure_config_dir() -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _migrate_legacy_prompts(config: AppConfig) -> bool:
+    """Reset legacy hardcoded prompts so users pick up new defaults.
+
+    Returns True if anything was changed (caller should persist).
+    """
+    changed = False
+    reply = config.modules.get("reply")
+    if reply is not None:
+        normalized = (reply.prompt or "").strip()
+        for legacy in _LEGACY_REPLY_PROMPTS:
+            if normalized == legacy.strip():
+                reply.prompt = ""
+                changed = True
+                break
+    return changed
+
+
 def load_config() -> AppConfig:
     ensure_config_dir()
     if not CONFIG_PATH.exists():
@@ -185,7 +218,10 @@ def load_config() -> AppConfig:
         return config
 
     data: dict[str, Any] = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    return AppConfig.model_validate(data)
+    config = AppConfig.model_validate(data)
+    if _migrate_legacy_prompts(config):
+        save_config(config)
+    return config
 
 
 def save_config(config: AppConfig) -> None:
