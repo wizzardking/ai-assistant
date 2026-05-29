@@ -1,90 +1,36 @@
 from __future__ import annotations
 
 import logging
-import os
-import shutil
-import subprocess
 import time
 import uuid
-from pathlib import Path
 
-from PyQt6.QtGui import QClipboard
-from PyQt6.QtWidgets import QApplication
 from pynput.keyboard import Controller, Key
+
+from ai_assistant.platform_support import get_clipboard_backend
 
 logger = logging.getLogger(__name__)
 
 
-def _find_xclip() -> str | None:
-    system = shutil.which("xclip")
-    if system:
-        return system
-    project_root = Path(__file__).resolve().parents[1]
-    local = project_root / ".local-lib" / "usr" / "bin" / "xclip"
-    if local.is_file():
-        return str(local)
-    return None
-
-
-def _xclip_env(xclip_path: str) -> dict[str, str]:
-    env = os.environ.copy()
-    local_lib = Path(xclip_path).resolve().parents[1] / "lib" / "x86_64-linux-gnu"
-    if local_lib.is_dir():
-        existing = env.get("LD_LIBRARY_PATH", "")
-        env["LD_LIBRARY_PATH"] = f"{local_lib}:{existing}" if existing else str(local_lib)
-    env.setdefault("DISPLAY", ":0")
-    return env
-
-
 class ClipboardManager:
+    """Cross-platform clipboard manager with selection capture support.
+
+    The actual read/write is delegated to a platform-specific backend
+    (xclip on Linux/X11, Qt/Win32 on Windows, pbcopy/pbpaste on macOS).
+    """
+
     PRE_COPY_WAIT_S = 0.03
     POLL_INTERVAL_S = 0.015
     POLL_TIMEOUT_S = 0.7
 
     def __init__(self) -> None:
         self._keyboard = Controller()
-        self._xclip = _find_xclip()
-        self._env = _xclip_env(self._xclip) if self._xclip else None
-        if self._xclip:
-            logger.info("Using xclip at %s", self._xclip)
-        else:
-            logger.warning("xclip not found – falling back to Qt clipboard")
-
-    def _qt_clipboard(self) -> QClipboard:
-        return QApplication.clipboard()
+        self._backend = get_clipboard_backend()
 
     def read_text(self) -> str:
-        if self._xclip:
-            try:
-                result = subprocess.run(
-                    [self._xclip, "-selection", "clipboard", "-o"],
-                    capture_output=True,
-                    env=self._env,
-                    timeout=2,
-                )
-                if result.returncode == 0:
-                    return result.stdout.decode("utf-8", errors="replace")
-            except subprocess.TimeoutExpired:
-                logger.warning("xclip read timeout")
-            except Exception:
-                logger.exception("xclip read failed")
-        return self._qt_clipboard().text() or ""
+        return self._backend.read_text() or ""
 
     def write_text(self, text: str) -> None:
-        if self._xclip:
-            try:
-                proc = subprocess.Popen(
-                    [self._xclip, "-selection", "clipboard", "-i"],
-                    stdin=subprocess.PIPE,
-                    env=self._env,
-                )
-                proc.communicate(input=text.encode("utf-8"), timeout=2)
-                return
-            except subprocess.TimeoutExpired:
-                logger.warning("xclip write timeout")
-            except Exception:
-                logger.exception("xclip write failed")
-        self._qt_clipboard().setText(text)
+        self._backend.write_text(text)
 
     def capture_selection(self) -> tuple[str, str | None]:
         """Simulate Ctrl+C and wait for the clipboard to change."""

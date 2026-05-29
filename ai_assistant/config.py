@@ -1,16 +1,34 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-CONFIG_DIR = Path.home() / ".config" / "ai-assistant"
+try:
+    from platformdirs import user_config_dir
+    CONFIG_DIR = Path(user_config_dir("ai-assistant", appauthor=False))
+except Exception:
+    # Last-resort fallback: ~/.config/ai-assistant on POSIX, %APPDATA%\ai-assistant on Windows.
+    if sys.platform.startswith("win"):
+        import os
+        CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / "ai-assistant"
+    else:
+        CONFIG_DIR = Path.home() / ".config" / "ai-assistant"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
-DEFAULT_HOTKEY = "mouse:button11"
-DEFAULT_HOTKEYS: list[str] = ["mouse:button11"]
+# Default trigger differs per platform: Linux ships with a mouse-button mapping
+# that the user can rebind via Input Remapper; Windows uses a plain modifier
+# combo because mouse drivers (Logitech Options, etc.) often hijack extra
+# mouse buttons before they reach the OS.
+if sys.platform.startswith("win"):
+    DEFAULT_HOTKEY = "<ctrl>+<shift>+<alt>+<space>"
+    DEFAULT_HOTKEYS: list[str] = ["<ctrl>+<shift>+<alt>+<space>"]
+else:
+    DEFAULT_HOTKEY = "mouse:button11"
+    DEFAULT_HOTKEYS = ["mouse:button11"]
 AVAILABLE_MODELS = ["gpt-5.5", "gpt-5.4-nano"]
 AVAILABLE_IMAGE_MODELS = ["gpt-image-2", "gpt-image-1"]
 DEFAULT_MODEL = "gpt-5.5"
