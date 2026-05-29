@@ -32,6 +32,10 @@ class ClipboardManager:
     def write_text(self, text: str) -> None:
         self._backend.write_text(text)
 
+    def simulate_copy(self) -> None:
+        """Public alias of :meth:`_simulate_copy` for platform-specific helpers."""
+        self._simulate_copy()
+
     def capture_selection(self) -> tuple[str, str | None]:
         """Simulate Ctrl+C and wait for the clipboard to change."""
         previous = self.read_text()
@@ -62,6 +66,17 @@ class ClipboardManager:
             self.write_text(previous)
 
     def _simulate_copy(self) -> None:
+        # Some backends (Windows) provide a more reliable, native Ctrl+C
+        # implementation via direct OS API calls. Use it when available;
+        # otherwise fall back to the original pynput path (Linux/macOS keep
+        # using pynput so their behaviour is unchanged).
+        backend_send = getattr(self._backend, "send_ctrl_c", None)
+        if callable(backend_send):
+            try:
+                if backend_send():
+                    return
+            except Exception:
+                logger.exception("Backend send_ctrl_c failed; falling back to pynput")
         try:
             with self._keyboard.pressed(Key.ctrl):
                 self._keyboard.press("c")

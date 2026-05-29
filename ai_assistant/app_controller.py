@@ -21,6 +21,7 @@ from ai_assistant.config import (
 from ai_assistant.hotkey import HotkeyListener
 from ai_assistant.modules.base import DISPLAY_IMAGE, DISPLAY_WINDOW, MenuNode
 from ai_assistant.modules.registry import create_default_registry
+from ai_assistant.platform_support import is_windows
 from ai_assistant.ui.chat_window import ChatWindow
 from ai_assistant.ui.image_prompt_dialog import ImagePromptDialog
 from ai_assistant.ui.image_result_window import ImageResultWindow
@@ -84,10 +85,47 @@ class AppController(QObject):
         self._cursor_x = cursor.x()
         self._cursor_y = cursor.y()
 
-        # Show the menu immediately and capture the selection on a worker thread
-        # so the UI never blocks behind xclip / Ctrl+C polling.
         self._selected_text = ""
         self._capture_done = False
+        self._capture_worker = None
+
+        if is_windows():
+            # Auf Windows zwei Windows-spezifische Hürden vor dem Capture:
+            # 1) Modifier-Tasten des Hotkeys (z.B. Shift+Ctrl) sind beim
+            #    Hotkey-Trigger noch physisch gedrückt. Würden wir sofort Ctrl+C
+            #    simulieren, sähe das Zielfenster z.B. Ctrl+Shift+C – nicht
+            #    Kopieren. Deshalb kurz auf Loslassen warten.
+            # 2) Das Radial-Popup übernimmt beim show_at() sofort den
+            #    Tastatur-Fokus. Capture muss also davor laufen, sonst geht
+            #    Ctrl+C ans Menü statt ans Original-Fenster.
+            # Für den Capture selbst nutzen wir den schnelleren und
+            # robusteren GetClipboardSequenceNumber-Pfad – damit fällt der
+            # 30-ms-Pre-Copy-Wait des Sentinel-Pfades weg und Polling kostet
+            # nichts. Linux/macOS bleiben beim asynchronen Worker-Pfad unten.
+            from ai_assistant.platform_support.windows import (
+                capture_selection_via_sequence,
+                wait_for_modifier_release,
+            )
+            wait_for_modifier_release()
+            try:
+                selected, _previous = capture_selection_via_sequence(
+                    self._clipboard
+                )
+                self._selected_text = selected
+            except Exception:
+                logger.exception("Synchronous clipboard capture failed")
+            self._capture_done = True
+            logger.info("Capture finished (%d chars)", len(self._selected_text))
+            self._radial_menu.show_at(
+                self._cursor_x,
+                self._cursor_y,
+                self._registry.all(),
+                self._settings_for,
+            )
+            return
+
+        # Linux/macOS: Menü sofort zeigen und Selektion auf einem Worker-Thread
+        # einlesen, damit die UI nicht hinter xclip / Ctrl+C-Polling blockiert.
         self._radial_menu.show_at(
             self._cursor_x,
             self._cursor_y,

@@ -46,11 +46,15 @@ class RadialMenu(QWidget):
     LABEL_PADDING_Y = 5
 
     def __init__(self) -> None:
+        # NoDropShadowWindowHint verhindert, dass der Windows-DWM einen nativen
+        # Schatten um das transparente Popup zeichnet (sichtbar als schwarze
+        # Ränder rechts/unten). Auf Linux/X11 hat das Flag keinen Effekt.
         super().__init__(
             None,
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Popup,
+            | Qt.WindowType.Popup
+            | Qt.WindowType.NoDropShadowWindowHint,
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
