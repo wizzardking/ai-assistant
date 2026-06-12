@@ -3,8 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from PyQt6.QtCore import QRect, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QFontMetrics, QMouseEvent, QPainter, QPixmap
+from PyQt6.QtCore import QPoint, QRect, Qt, pyqtSignal
+from PyQt6.QtGui import (
+    QColor,
+    QFont,
+    QFontMetrics,
+    QGuiApplication,
+    QMouseEvent,
+    QPainter,
+    QPixmap,
+)
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import QWidget
 
@@ -66,6 +74,10 @@ class RadialMenu(QWidget):
 
         self._center_x = 0
         self._center_y = 0
+        # Rohe Cursor-Position beim Öffnen. _center_x/_center_y können davon
+        # abweichen, wenn das Menü vom Bildschirmrand weggeklemmt werden muss.
+        self._anchor_x = 0
+        self._anchor_y = 0
         # stack of layers; layer 0 = top-level modules as nodes; deeper layers = sub-nodes
         self._stack: list[tuple[MenuNode, ...]] = []
         # ids of the parents we descended through (parallel to stack[1:])
@@ -86,6 +98,8 @@ class RadialMenu(QWidget):
         self._modules = modules
         self._modules_by_id = {m.id: m for m in modules}
         self._settings_provider = settings_provider
+        self._anchor_x = x
+        self._anchor_y = y
         self._center_x = x
         self._center_y = y
         self._stack = [
@@ -336,4 +350,37 @@ class RadialMenu(QWidget):
         width = padding * 2 + 40
         height = padding * 2 + 40
         self.setFixedSize(width, height)
-        self.move(self._center_x - width // 2, self._center_y - height // 2)
+
+        # Das Menü so positionieren, dass es vollständig auf dem Bildschirm
+        # bleibt, der den Cursor enthält – auch wenn der Hotkey nah am
+        # Monitorrand ausgelöst wird. Wir verschieben dazu das Zentrum (und
+        # damit Icons, Labels und den Mittel-Button gemeinsam). Plattform-
+        # übergreifend über Qt, daher identisch für Windows und Linux.
+        cx, cy = self._clamped_center(width, height)
+        self._center_x = cx
+        self._center_y = cy
+        self.move(cx - width // 2, cy - height // 2)
+
+    def _clamped_center(self, width: int, height: int) -> tuple[int, int]:
+        """Center the menu on the cursor but keep the whole window on-screen."""
+        anchor = QPoint(self._anchor_x, self._anchor_y)
+        screen = QGuiApplication.screenAt(anchor) or QGuiApplication.primaryScreen()
+        if screen is None:
+            return self._anchor_x, self._anchor_y
+
+        area = screen.availableGeometry()
+        half_w = width // 2
+        half_h = height // 2
+
+        # Gewünschte obere linke Ecke, wenn exakt auf dem Cursor zentriert.
+        desired_left = self._anchor_x - half_w
+        desired_top = self._anchor_y - half_h
+
+        # Auf den sichtbaren Bereich klemmen. Falls das Fenster größer als der
+        # Bildschirm ist, an der oberen/linken Kante ausrichten (Fallback).
+        max_left = area.x() + area.width() - width
+        max_top = area.y() + area.height() - height
+        left = max(area.x(), min(desired_left, max_left))
+        top = max(area.y(), min(desired_top, max_top))
+
+        return left + half_w, top + half_h
