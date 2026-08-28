@@ -6,6 +6,7 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
+from ai_assistant.config import reasoning_effort_for
 from ai_assistant.secrets import get_openai_api_key
 
 
@@ -18,12 +19,20 @@ def _require_client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=api_key)
 
 
+def _chat_kwargs(model: str) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {"model": model}
+    effort = reasoning_effort_for(model)
+    if effort:
+        kwargs["reasoning_effort"] = effort
+    return kwargs
+
+
 class OpenAIProvider:
     async def complete(self, prompt: str, model: str) -> str:
         client = _require_client()
         response = await client.chat.completions.create(
-            model=model,
             messages=[{"role": "user", "content": prompt}],
+            **_chat_kwargs(model),
         )
         content = response.choices[0].message.content
         if not content:
@@ -33,7 +42,10 @@ class OpenAIProvider:
     async def chat(self, messages: list[dict[str, Any]], model: str) -> str:
         """Send a message history (list of {role, content} dicts) and return the assistant reply."""
         client = _require_client()
-        response = await client.chat.completions.create(model=model, messages=messages)
+        response = await client.chat.completions.create(
+            messages=messages,
+            **_chat_kwargs(model),
+        )
         content = response.choices[0].message.content
         if not content:
             raise RuntimeError("Leere Antwort von OpenAI erhalten.")

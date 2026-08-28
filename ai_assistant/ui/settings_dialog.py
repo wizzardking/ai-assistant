@@ -44,6 +44,7 @@ from ai_assistant.config import (
     DEFAULT_TRANSLATOR_PROMPT,
     IMAGE_QUALITIES,
     IMAGE_SIZES,
+    model_label,
     save_config,
 )
 from ai_assistant.hotkey import format_hotkey
@@ -186,9 +187,7 @@ class SettingsDialog(QDialog):
         form.addRow("API-Key:", self._api_key_input)
 
         self._default_model = QComboBox()
-        self._default_model.addItems(AVAILABLE_MODELS)
-        if self._config.openai_default_model in AVAILABLE_MODELS:
-            self._default_model.setCurrentText(self._config.openai_default_model)
+        self._fill_model_combo(self._default_model, self._config.openai_default_model)
         form.addRow("Standard-Modell:", self._default_model)
 
         clear_btn = QPushButton("API-Key löschen")
@@ -210,9 +209,7 @@ class SettingsDialog(QDialog):
         outer.addLayout(form)
 
         self._translator_model = QComboBox()
-        self._translator_model.addItems(AVAILABLE_MODELS)
-        if module_settings.model in AVAILABLE_MODELS:
-            self._translator_model.setCurrentText(module_settings.model)
+        self._fill_model_combo(self._translator_model, module_settings.model)
         form.addRow("Modell:", self._translator_model)
 
         lang_box = QGroupBox("Verfügbare Sprachen im Radmenü")
@@ -247,9 +244,7 @@ class SettingsDialog(QDialog):
         outer.addLayout(form)
 
         self._rewriter_model = QComboBox()
-        self._rewriter_model.addItems(AVAILABLE_MODELS)
-        if module_settings.model in AVAILABLE_MODELS:
-            self._rewriter_model.setCurrentText(module_settings.model)
+        self._fill_model_combo(self._rewriter_model, module_settings.model)
         form.addRow("Modell:", self._rewriter_model)
 
         prompt_label = QLabel("Prompt-Vorlage (Platzhalter: {tone_instruction}, {text}):")
@@ -271,9 +266,7 @@ class SettingsDialog(QDialog):
         outer.addLayout(form)
 
         self._reply_model = QComboBox()
-        self._reply_model.addItems(AVAILABLE_MODELS)
-        if module_settings.model in AVAILABLE_MODELS:
-            self._reply_model.setCurrentText(module_settings.model)
+        self._fill_model_combo(self._reply_model, module_settings.model)
         form.addRow("Modell:", self._reply_model)
 
         prompt_label = QLabel(
@@ -297,9 +290,7 @@ class SettingsDialog(QDialog):
         outer.addLayout(form)
 
         self._summarize_model = QComboBox()
-        self._summarize_model.addItems(AVAILABLE_MODELS)
-        if module_settings.model in AVAILABLE_MODELS:
-            self._summarize_model.setCurrentText(module_settings.model)
+        self._fill_model_combo(self._summarize_model, module_settings.model)
         form.addRow("Modell:", self._summarize_model)
 
         prompt_label = QLabel("Prompt-Vorlage (Platzhalter: {text}):")
@@ -321,9 +312,7 @@ class SettingsDialog(QDialog):
         outer.addLayout(form)
 
         self._explain_model = QComboBox()
-        self._explain_model.addItems(AVAILABLE_MODELS)
-        if module_settings.model in AVAILABLE_MODELS:
-            self._explain_model.setCurrentText(module_settings.model)
+        self._fill_model_combo(self._explain_model, module_settings.model)
         form.addRow("Modell:", self._explain_model)
 
         prompt_label = QLabel("Prompt-Vorlage (Platzhalter: {text}):")
@@ -392,9 +381,7 @@ class SettingsDialog(QDialog):
         outer.addLayout(form)
 
         self._chat_model = QComboBox()
-        self._chat_model.addItems(AVAILABLE_MODELS)
-        if module_settings.model in AVAILABLE_MODELS:
-            self._chat_model.setCurrentText(module_settings.model)
+        self._fill_model_combo(self._chat_model, module_settings.model)
         form.addRow("Modell:", self._chat_model)
 
         prompt_label = QLabel("System-Prompt (legt Tonalität und Verhalten fest):")
@@ -422,6 +409,21 @@ class SettingsDialog(QDialog):
         layout.addStretch()
         return widget
 
+    @staticmethod
+    def _fill_model_combo(combo: QComboBox, selected: str) -> None:
+        for model_id in AVAILABLE_MODELS:
+            combo.addItem(model_label(model_id), model_id)
+        index = combo.findData(selected)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+
+    @staticmethod
+    def _combo_model(combo: QComboBox) -> str:
+        data = combo.currentData()
+        if isinstance(data, str) and data:
+            return data
+        return combo.currentText()
+
     def _clear_api_key(self) -> None:
         delete_openai_api_key()
         self._api_key_input.clear()
@@ -438,10 +440,10 @@ class SettingsDialog(QDialog):
         self._config.hotkeys = hotkey_lines
         self._config.hotkey = hotkey_lines[0]
         self._config.user_name = self._user_name_input.text().strip()
-        self._config.openai_default_model = self._default_model.currentText()
+        self._config.openai_default_model = self._combo_model(self._default_model)
 
         translator = self._config.get_module_settings("translator", DEFAULT_TRANSLATOR_PROMPT)
-        translator.model = self._translator_model.currentText()
+        translator.model = self._combo_model(self._translator_model)
         translator.prompt = self._translator_prompt.toPlainText().strip() or DEFAULT_TRANSLATOR_PROMPT
         selected_langs = [
             code for code, checkbox in self._translator_lang_checkboxes.items()
@@ -452,19 +454,19 @@ class SettingsDialog(QDialog):
         translator.languages = selected_langs
 
         rewriter = self._config.get_module_settings("rewriter", DEFAULT_REWRITER_PROMPT)
-        rewriter.model = self._rewriter_model.currentText()
+        rewriter.model = self._combo_model(self._rewriter_model)
         rewriter.prompt = self._rewriter_prompt.toPlainText().strip() or DEFAULT_REWRITER_PROMPT
 
         reply = self._config.get_module_settings("reply", DEFAULT_REPLY_PROMPT)
-        reply.model = self._reply_model.currentText()
+        reply.model = self._combo_model(self._reply_model)
         reply.prompt = self._reply_prompt.toPlainText().strip() or DEFAULT_REPLY_PROMPT
 
         summarize = self._config.get_module_settings("summarize", DEFAULT_SUMMARIZE_PROMPT)
-        summarize.model = self._summarize_model.currentText()
+        summarize.model = self._combo_model(self._summarize_model)
         summarize.prompt = self._summarize_prompt.toPlainText().strip() or DEFAULT_SUMMARIZE_PROMPT
 
         explain = self._config.get_module_settings("explain", DEFAULT_EXPLAIN_PROMPT)
-        explain.model = self._explain_model.currentText()
+        explain.model = self._combo_model(self._explain_model)
         explain.prompt = self._explain_prompt.toPlainText().strip() or DEFAULT_EXPLAIN_PROMPT
 
         image = self._config.get_module_settings("image_generate", DEFAULT_IMAGE_PROMPT)
@@ -474,7 +476,7 @@ class SettingsDialog(QDialog):
         image.prompt = self._image_prompt.toPlainText().strip() or DEFAULT_IMAGE_PROMPT
 
         chat = self._config.get_module_settings("chat", DEFAULT_CHAT_SYSTEM_PROMPT)
-        chat.model = self._chat_model.currentText()
+        chat.model = self._combo_model(self._chat_model)
         chat.system_prompt = self._chat_system_prompt.toPlainText().strip() or DEFAULT_CHAT_SYSTEM_PROMPT
         chat.prompt = chat.system_prompt
 
